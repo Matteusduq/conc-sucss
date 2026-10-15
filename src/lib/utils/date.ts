@@ -53,3 +53,66 @@ export function formatDurationMinutes(minutes: number): string {
   }
   return `${minutes} min`;
 }
+
+/**
+ * Returns YYYY-MM-DD formatted string in America/Sao_Paulo timezone.
+ * Prevents UTC midnight boundary shifts where a 22:00 BRT event would leak into the next day.
+ */
+export function getLocalDateString(dateInput: Date | string = new Date()): string {
+  const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return formatter.format(d);
+}
+
+/**
+ * Calculates start of the week (Monday) and end of the week (Sunday) in YYYY-MM-DD.
+ */
+export function getWeekStartAndEnd(dateInput: Date | string = new Date()): { weekStart: string; weekEnd: string } {
+  const d = typeof dateInput === 'string' ? new Date(dateInput) : new Date(dateInput.getTime());
+  
+  // Get date in local representation
+  const localStr = getLocalDateString(d);
+  const [year, month, day] = localStr.split('-').map(Number);
+  
+  // Create a local date object
+  const localDate = new Date(year, month - 1, day);
+  // In JS: 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const dayOfWeek = localDate.getDay();
+  // We want Monday as start of study week (dayOfWeek 1 -> offset 0, Sunday 0 -> offset -6)
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  
+  const monday = new Date(localDate);
+  monday.setDate(localDate.getDate() + diffToMonday);
+  
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  
+  const formatYmd = (dateObj: Date) => {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const dayOfMonth = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dayOfMonth}`;
+  };
+
+  return {
+    weekStart: formatYmd(monday),
+    weekEnd: formatYmd(sunday),
+  };
+}
+
+/**
+ * Computes difference in calendar days between two dates in America/Sao_Paulo.
+ */
+export function getCalendarDaysDiff(dateA: string, dateB: string): number {
+  const [yA, mA, dA] = dateA.split('-').map(Number);
+  const [yB, mB, dB] = dateB.split('-').map(Number);
+  const utcA = Date.UTC(yA, mA - 1, dA);
+  const utcB = Date.UTC(yB, mB - 1, dB);
+  return Math.round((utcB - utcA) / (1000 * 60 * 60 * 24));
+}
+

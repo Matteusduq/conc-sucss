@@ -41,10 +41,19 @@ import {
   dbStateToFsrsCard,
 } from '@/lib/fsrs/scheduler';
 import { Rating } from 'ts-fsrs';
+import {
+  GamificationProfile,
+  XpTransaction,
+  DailyMission,
+} from '@/lib/gamification/types';
+import { createDefaultGamificationProfile } from '@/lib/gamification/xp';
+import { processGamification } from '@/lib/gamification/engine';
+import { MockExamInput, buildMockExamRecord } from '@/lib/gamification/mock-exam';
 
 export const STORAGE_KEY_V1 = 'camara_estudos_store_v1';
 export const STORAGE_KEY_V2 = 'camara_estudos_store_v2';
-export const STORE_VERSION = 2;
+export const STORAGE_KEY_V3 = 'camara_estudos_store_v3';
+export const STORE_VERSION = 3;
 
 export interface AppStoreData {
   exam: Exam;
@@ -64,6 +73,10 @@ export interface AppStoreData {
   settings: UserStudySettings;
   mockExams: MockExam[];
   events: StudyEvent[];
+  gamificationProfile: GamificationProfile;
+  xpTransactions: XpTransaction[];
+  dailyMissions: Record<string, DailyMission[]>;
+  unlockedAchievements: string[];
 }
 
 export interface StoredStoreEnvelope {
@@ -111,10 +124,18 @@ export function getDefaultStore(): AppStoreData {
       memory_daily_minutes: 25,
       desired_retention: 0.90,
       today_available_minutes: null,
+      gamification_show_animations: true,
+      gamification_show_xp_toast: true,
+      gamification_show_streak: true,
+      gamification_weekly_target_days: 6,
       updated_at: '2026-10-14T00:00:00Z',
     },
     mockExams: [],
     events: [],
+    gamificationProfile: createDefaultGamificationProfile(),
+    xpTransactions: [],
+    dailyMissions: {},
+    unlockedAchievements: [],
   };
 }
 
@@ -332,7 +353,50 @@ export function migrateV1ToV2(v1Data: Partial<AppStoreData>): AppStoreData {
     },
     mockExams: v1Data.mockExams || [],
     events: v1Data.events || [],
+    gamificationProfile: createDefaultGamificationProfile(),
+    xpTransactions: [],
+    dailyMissions: {},
+    unlockedAchievements: [],
   };
+}
+
+export function migrateV2ToV3(v2Data: Partial<AppStoreData>): AppStoreData {
+  const defaultStore = getDefaultStore();
+
+  const baseStore: AppStoreData = {
+    ...defaultStore,
+    ...v2Data,
+    exam: {
+      ...defaultStore.exam,
+      ...(v2Data.exam || {}),
+    },
+    examBlocks: v2Data.examBlocks && v2Data.examBlocks.length > 0 ? v2Data.examBlocks : defaultStore.examBlocks,
+    subjects: v2Data.subjects && v2Data.subjects.length > 0 ? v2Data.subjects : defaultStore.subjects,
+    topics: v2Data.topics && v2Data.topics.length > 0 ? v2Data.topics : defaultStore.topics,
+    syllabusItems: v2Data.syllabusItems && v2Data.syllabusItems.length > 0 ? v2Data.syllabusItems : defaultStore.syllabusItems,
+    topicSyllabusItems: v2Data.topicSyllabusItems && v2Data.topicSyllabusItems.length > 0 ? v2Data.topicSyllabusItems : defaultStore.topicSyllabusItems,
+    materials: v2Data.materials && v2Data.materials.length > 0 ? v2Data.materials : defaultStore.materials,
+    materialProgress: v2Data.materialProgress || {},
+    questionSessions: v2Data.questionSessions || [],
+    errorLogs: v2Data.errorLogs || [],
+    flashcards: v2Data.flashcards || [],
+    fsrsStates: v2Data.fsrsStates || {},
+    reviews: v2Data.reviews || [],
+    discursiveSessions: v2Data.discursiveSessions || [],
+    settings: {
+      ...defaultStore.settings,
+      ...(v2Data.settings || {}),
+    },
+    mockExams: v2Data.mockExams || [],
+    events: v2Data.events || [],
+    gamificationProfile: v2Data.gamificationProfile || createDefaultGamificationProfile(),
+    xpTransactions: v2Data.xpTransactions || [],
+    dailyMissions: v2Data.dailyMissions || {},
+    unlockedAchievements: v2Data.unlockedAchievements || [],
+  };
+
+  const { store: processedStore } = processGamification(baseStore);
+  return processedStore;
 }
 
 export function loadStore(): AppStoreData {
@@ -340,12 +404,12 @@ export function loadStore(): AppStoreData {
     return getDefaultStore();
   }
   try {
-    // 1. Try v2 format first
-    const rawV2 = localStorage.getItem(STORAGE_KEY_V2);
-    if (rawV2) {
-      const parsedEnvelope = JSON.parse(rawV2);
+    // 1. Try v3 format first
+    const rawV3 = localStorage.getItem(STORAGE_KEY_V3);
+    if (rawV3) {
+      const parsedEnvelope = JSON.parse(rawV3);
       let data: AppStoreData;
-      if (parsedEnvelope && parsedEnvelope.version === 2 && parsedEnvelope.data) {
+      if (parsedEnvelope && parsedEnvelope.version === 3 && parsedEnvelope.data) {
         data = parsedEnvelope.data as AppStoreData;
       } else {
         data = parsedEnvelope as AppStoreData;
@@ -364,8 +428,10 @@ export function loadStore(): AppStoreData {
       if (!data.discursiveSessions) {
         data.discursiveSessions = [];
       }
+      if (!data.mockExams) {
+        data.mockExams = [];
+      }
       if (!data.topics || data.topics.length < SEED_TOPICS.length) {
-        // Merge missing topics
         const existingIds = new Set(data.topics.map((t) => t.id));
         const missingTopics = SEED_TOPICS.filter((t) => !existingIds.has(t.id));
         data.topics = [...data.topics, ...missingTopics];
@@ -373,22 +439,42 @@ export function loadStore(): AppStoreData {
       if (!data.topics || data.topics.some((t) => !t.study_score || t.study_score === 0)) {
         data = recalculateAllStudyScoresService(data);
       }
-      return data;
+      if (!data.gamificationProfile) {
+        data.gamificationProfile = createDefaultGamificationProfile();
+      }
+      if (!data.xpTransactions) data.xpTransactions = [];
+      if (!data.dailyMissions) data.dailyMissions = {};
+      if (!data.unlockedAchievements) data.unlockedAchievements = [];
+
+      const { store: processed } = processGamification(data);
+      return processed;
     }
 
-    // 2. Check if v1 exists and needs migration
-    const rawV1 = localStorage.getItem(STORAGE_KEY_V1);
-    if (rawV1) {
-      const parsedV1 = JSON.parse(rawV1) as Partial<AppStoreData>;
-      const migrated = recalculateAllStudyScoresService(migrateV1ToV2(parsedV1));
+    // 2. Check if v2 exists and needs migration to v3
+    const rawV2 = localStorage.getItem(STORAGE_KEY_V2);
+    if (rawV2) {
+      const parsedEnvelope = JSON.parse(rawV2);
+      const v2Data = (parsedEnvelope?.data || parsedEnvelope) as Partial<AppStoreData>;
+      const migrated = recalculateAllStudyScoresService(migrateV2ToV3(v2Data));
       saveStore(migrated);
       return migrated;
     }
 
-    // 3. Brand new setup: initialize default store in v2
+    // 3. Check if v1 exists and needs migration
+    const rawV1 = localStorage.getItem(STORAGE_KEY_V1);
+    if (rawV1) {
+      const parsedV1 = JSON.parse(rawV1) as Partial<AppStoreData>;
+      const v2Data = migrateV1ToV2(parsedV1);
+      const migrated = recalculateAllStudyScoresService(migrateV2ToV3(v2Data));
+      saveStore(migrated);
+      return migrated;
+    }
+
+    // 4. Brand new setup: initialize default store in v3
     const initial = recalculateAllStudyScoresService(getDefaultStore());
-    saveStore(initial);
-    return initial;
+    const { store: processedInitial } = processGamification(initial);
+    saveStore(processedInitial);
+    return processedInitial;
   } catch (err) {
     console.error('Error loading store, falling back to default store:', err);
     return getDefaultStore();
@@ -402,7 +488,7 @@ export function saveStore(store: AppStoreData) {
       version: STORE_VERSION,
       data: store,
     };
-    localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(envelope));
+    localStorage.setItem(STORAGE_KEY_V3, JSON.stringify(envelope));
   } catch (err) {
     console.error('Failed to save store to localStorage:', err);
   }
@@ -592,8 +678,9 @@ export function recordQuestionSessionAction(
   };
 
   nextStore.events = [event, ...nextStore.events];
-  saveStore(nextStore);
-  return nextStore;
+  const { store: gamified } = processGamification(nextStore);
+  saveStore(gamified);
+  return gamified;
 }
 
 export function recordErrorLogAction(
@@ -627,8 +714,56 @@ export function recordErrorLogAction(
 
   nextStore = recalculateTopicDomainService(errorData.topic_id, nextStore);
   nextStore = recalculateAllStudyScoresService(nextStore);
-  saveStore(nextStore);
-  return { store: nextStore, errorId: id };
+  const { store: gamified } = processGamification(nextStore);
+  saveStore(gamified);
+  return { store: gamified, errorId: id };
+}
+
+export function resolveErrorLogAction(
+  errorId: string,
+  store: AppStoreData
+): AppStoreData {
+  const now = new Date().toISOString();
+  let topicId: string | undefined;
+
+  const updatedErrors = store.errorLogs.map((e) => {
+    if (e.id === errorId) {
+      topicId = e.topic_id;
+      return {
+        ...e,
+        resolved: true,
+        resolved_at: now,
+        updated_at: now,
+      };
+    }
+    return e;
+  });
+
+  let nextStore: AppStoreData = {
+    ...store,
+    errorLogs: updatedErrors,
+    events: [
+      {
+        id: `ev-${Date.now()}`,
+        user_id: 'local-user',
+        event_type: 'ERROR_RESOLVED',
+        entity_type: 'error_log',
+        entity_id: errorId,
+        payload: { errorId, topicId },
+        created_at: now,
+      },
+      ...store.events,
+    ],
+  };
+
+  if (topicId) {
+    nextStore = recalculateTopicDomainService(topicId, nextStore);
+    nextStore = recalculateAllStudyScoresService(nextStore);
+  }
+
+  const { store: gamified } = processGamification(nextStore);
+  saveStore(gamified);
+  return gamified;
 }
 
 export function createFlashcardAction(
@@ -681,8 +816,9 @@ export function createFlashcardAction(
     ],
   };
 
-  saveStore(nextStore);
-  return nextStore;
+  const { store: gamified } = processGamification(nextStore);
+  saveStore(gamified);
+  return gamified;
 }
 
 export function reviewFlashcardAction(
@@ -737,12 +873,43 @@ export function reviewFlashcardAction(
       [flashcardId]: updatedFsrsState,
     },
     reviews: [newReview, ...store.reviews],
+    events: [
+      {
+        id: `ev-${Date.now()}`,
+        user_id: card.user_id,
+        event_type: 'FLASHCARD_REVIEWED',
+        entity_type: 'flashcard',
+        entity_id: flashcardId,
+        payload: { rating: ratingStr, topicId: card.topic_id },
+        created_at: new Date().toISOString(),
+      },
+      ...store.events,
+    ],
   };
 
   // Recalculate domain for this topic
   nextStore = recalculateTopicDomainService(card.topic_id, nextStore);
-  saveStore(nextStore);
-  return nextStore;
+
+  // Check if all overdue cards are now cleared
+  const remainingDue = getDueFlashcards(nextStore);
+  if (remainingDue.length === 0) {
+    nextStore.events = [
+      {
+        id: `ev-${Date.now()}-qc`,
+        user_id: card.user_id,
+        event_type: 'FLASHCARD_QUEUE_CLEARED',
+        entity_type: 'flashcard_queue',
+        entity_id: 'all',
+        payload: {},
+        created_at: new Date().toISOString(),
+      },
+      ...nextStore.events,
+    ];
+  }
+
+  const { store: gamified } = processGamification(nextStore);
+  saveStore(gamified);
+  return gamified;
 }
 
 export function updateMaterialProgressAction(
@@ -768,12 +935,14 @@ export function updateMaterialProgressAction(
     updated_at: new Date().toISOString(),
   };
 
+  const isNewlyCompleted = Boolean(progressData.completed && !existing.completed);
+
   const merged: MaterialProgress = {
     ...existing,
     ...progressData,
     last_opened_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    completed_at: progressData.completed && !existing.completed ? new Date().toISOString() : existing.completed_at,
+    completed_at: isNewlyCompleted ? new Date().toISOString() : existing.completed_at,
   };
 
   let nextStore: AppStoreData = {
@@ -783,6 +952,35 @@ export function updateMaterialProgressAction(
       [progressData.material_id]: merged,
     },
   };
+
+  // Log events
+  if (isNewlyCompleted) {
+    nextStore.events = [
+      {
+        id: `ev-${Date.now()}-mc`,
+        user_id: progressData.user_id,
+        event_type: 'MATERIAL_COMPLETED',
+        entity_type: 'study_material',
+        entity_id: progressData.material_id,
+        payload: { topicId: progressData.topic_id },
+        created_at: new Date().toISOString(),
+      },
+      ...nextStore.events,
+    ];
+  } else if (merged.total_study_seconds >= 1200) {
+    nextStore.events = [
+      {
+        id: `ev-${Date.now()}-mp`,
+        user_id: progressData.user_id,
+        event_type: 'MATERIAL_PROGRESS_RECORDED',
+        entity_type: 'study_material',
+        entity_id: progressData.material_id,
+        payload: { topicId: progressData.topic_id, totalSeconds: merged.total_study_seconds },
+        created_at: new Date().toISOString(),
+      },
+      ...nextStore.events,
+    ];
+  }
 
   // Status transitions
   nextStore.topics = nextStore.topics.map((t) => {
@@ -798,8 +996,9 @@ export function updateMaterialProgressAction(
   });
 
   nextStore = recalculateTopicDomainService(progressData.topic_id, nextStore);
-  saveStore(nextStore);
-  return nextStore;
+  const { store: gamified } = processGamification(nextStore);
+  saveStore(gamified);
+  return gamified;
 }
 
 // -------------------------------------------------------------
@@ -847,8 +1046,9 @@ export function recordDiscursiveSessionAction(
     ],
   };
 
-  saveStore(nextStore);
-  return { store: nextStore, session: newSession };
+  const { store: gamified } = processGamification(nextStore);
+  saveStore(gamified);
+  return { store: gamified, session: newSession };
 }
 
 export function deleteDiscursiveSessionAction(
@@ -859,8 +1059,47 @@ export function deleteDiscursiveSessionAction(
     ...store,
     discursiveSessions: (store.discursiveSessions || []).filter((s) => s.id !== sessionId),
   };
-  saveStore(nextStore);
-  return nextStore;
+  const { store: gamified } = processGamification(nextStore);
+  saveStore(gamified);
+  return gamified;
+}
+
+// -------------------------------------------------------------
+// Mock Exam Actions (Simulados & Checkpoints)
+// -------------------------------------------------------------
+
+export function recordMockExamAction(
+  mockData: MockExamInput,
+  store: AppStoreData
+): { store: AppStoreData; mockExam: MockExam } {
+  const newMock = buildMockExamRecord(mockData);
+
+  const nextStore: AppStoreData = {
+    ...store,
+    mockExams: [newMock, ...(store.mockExams || [])],
+    events: [
+      {
+        id: `ev-${Date.now()}`,
+        user_id: newMock.user_id,
+        event_type: 'MOCK_EXAM_RECORDED',
+        entity_type: 'mock_exam',
+        entity_id: newMock.id,
+        payload: {
+          type: newMock.type,
+          totalQuestions: newMock.total_questions,
+          netPoints: newMock.net_points,
+          p1Net: newMock.p1_net,
+          p2Net: newMock.p2_net,
+        },
+        created_at: newMock.performed_at,
+      },
+      ...store.events,
+    ],
+  };
+
+  const { store: gamified } = processGamification(nextStore);
+  saveStore(gamified);
+  return { store: gamified, mockExam: newMock };
 }
 
 // -------------------------------------------------------------

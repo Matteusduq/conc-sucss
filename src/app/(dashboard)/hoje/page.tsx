@@ -9,11 +9,15 @@ import { generateDailyPlan, generateDeterministicInsights } from '@/lib/study-en
 import { getDueFlashcards } from '@/lib/data/store';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { AlertTriangle, Brain, Sparkles, BookOpen, PenTool, CheckCircle, Info, Compass, Target, ArrowRight, Layers } from 'lucide-react';
+import { AlertTriangle, Brain, Sparkles, BookOpen, PenTool, CheckCircle, Info, Compass, Target, ArrowRight, Layers, Trophy, Flame } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { PriorityBadge } from '@/components/study/PriorityBadge';
 import { StudyScoreBadge } from '@/components/study/StudyScoreBadge';
+import { getOrCreateDailyMissions } from '@/lib/gamification/missions';
+import { calculateWeeklyConsistency, getAllMeaningfulStudyDates } from '@/lib/gamification/streak';
+import { getLevelProgress } from '@/lib/gamification/xp';
+import { getLocalDateString } from '@/lib/utils/date';
 
 export default function HojePage() {
   const router = useRouter();
@@ -65,6 +69,25 @@ export default function HojePage() {
   const p3SessionsCount = (store.discursiveSessions || []).length;
   const isPreparationUnstarted = totalQuestions === 0 && p1StartedCount === 0 && p2StartedCount === 0 && p3SessionsCount === 0;
 
+  // Gamification state
+  const todayStr = getLocalDateString();
+  const { missions } = getOrCreateDailyMissions(todayStr, store);
+  const completedMissionsCount = missions.filter((m) => m.status === 'COMPLETED').length;
+  const profile = store.gamificationProfile || { total_xp: 0, level: 1, current_streak: 0, longest_streak: 0 };
+  const { level, progressPercent } = getLevelProgress(profile.total_xp);
+  const meaningfulDates = getAllMeaningfulStudyDates({
+    questionSessions: store.questionSessions,
+    materialProgress: store.materialProgress,
+    reviews: store.reviews,
+    discursiveSessions: store.discursiveSessions || [],
+    mockExams: store.mockExams || [],
+  });
+  const weeklyRhythm = calculateWeeklyConsistency(
+    meaningfulDates,
+    todayStr,
+    store.settings?.gamification_weekly_target_days || 6
+  );
+
   return (
     <div className="space-y-6">
       {/* 1. Header & Exam Countdown */}
@@ -73,6 +96,81 @@ export default function HojePage() {
         role={store.exam.role}
         examDate={store.exam.exam_date}
       />
+
+      {/* Gamification Quick Bar */}
+      <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Level & XP */}
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
+              <Trophy className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-white">Nível {level}</span>
+                <span className="text-[10px] text-zinc-400 font-mono">
+                  {profile.total_xp.toLocaleString('pt-BR')} XP
+                </span>
+              </div>
+              <div className="w-24 h-1.5 rounded-full bg-zinc-800 mt-1 overflow-hidden">
+                <div
+                  className="h-full bg-amber-400 rounded-full"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="hidden sm:block w-px h-8 bg-zinc-800" />
+
+          {/* Streak */}
+          <div className="flex items-center gap-2">
+            <Flame className="w-4 h-4 text-amber-400" />
+            <div>
+              <span className="text-xs font-bold text-white font-mono">
+                {profile.current_streak} dias
+              </span>
+              <span className="text-[10px] text-zinc-400 block">Sequência</span>
+            </div>
+          </div>
+
+          <div className="hidden sm:block w-px h-8 bg-zinc-800" />
+
+          {/* Weekly Rhythm */}
+          <div>
+            <div className="text-[11px] font-semibold text-zinc-300">
+              Ritmo: {weeklyRhythm.daysStudiedThisWeek}/{weeklyRhythm.targetDays} dias
+            </div>
+            <div className="flex items-center gap-1 mt-1">
+              {weeklyRhythm.daysStatuses.map((day) => (
+                <div
+                  key={day.date}
+                  className={`w-2 h-2 rounded-full ${
+                    day.completed ? 'bg-emerald-400' : 'bg-zinc-800'
+                  }`}
+                  title={`${day.dayName}: ${day.completed ? 'Estudo registrado' : 'Pendente'}`}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Missions summary and link to /jornada */}
+        <div className="flex items-center justify-between md:justify-end gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-zinc-800">
+          <div className="text-right">
+            <span className="text-[10px] text-zinc-400">Missões de hoje:</span>
+            <div className="text-xs font-mono font-bold text-amber-300">
+              {completedMissionsCount} de {missions.length} concluídas
+            </div>
+          </div>
+          <Link href="/jornada">
+            <Button size="sm" variant="outline" className="border-zinc-700 hover:bg-zinc-800 text-xs text-zinc-200 gap-1.5 h-8">
+              <Compass className="w-3.5 h-3.5 text-indigo-400" />
+              Ver Jornada
+            </Button>
+          </Link>
+        </div>
+      </div>
 
       {/* 2. State of preparation (P1, P2, P3 status block) */}
       <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/40 space-y-3">

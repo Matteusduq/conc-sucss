@@ -14,6 +14,7 @@ import {
   BarChart3,
   Settings,
   PenTool,
+  Compass,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
@@ -24,12 +25,13 @@ export function MobileNav() {
 
   const mainTabs = [
     { href: '/hoje', label: 'Hoje', icon: CalendarDays },
+    { href: '/jornada', label: 'Jornada', icon: Compass },
     { href: '/plano', label: 'Plano', icon: ListTree },
     { href: '/memoria', label: 'Memória', icon: Brain },
-    { href: '/performance', label: 'Performance', icon: TrendingUp },
   ];
 
   const moreTabs = [
+    { href: '/performance', label: 'Performance', icon: TrendingUp },
     { href: '/discursiva', label: 'Discursiva', icon: PenTool },
     { href: '/biblioteca', label: 'Biblioteca', icon: BookMarked },
     { href: '/erros', label: 'Caderno de Erros', icon: AlertOctagon },

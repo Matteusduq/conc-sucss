@@ -14,11 +14,13 @@ import {
   BarChart3,
   Settings,
   Sparkles,
+  Compass,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
 export const NAV_ITEMS = [
   { href: '/hoje', label: 'Hoje', icon: CalendarDays },
+  { href: '/jornada', label: 'Jornada', icon: Compass },
   { href: '/plano', label: 'Plano', icon: ListTree },
   { href: '/biblioteca', label: 'Biblioteca', icon: BookMarked },
   { href: '/memoria', label: 'Memória', icon: Brain },

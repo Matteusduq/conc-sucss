@@ -390,6 +390,119 @@ export default function AnalyticsPage() {
           </div>
         </Card>
       </div>
+
+      {/* 4. Gamification Analytics (Métricas da Jornada) */}
+      {(() => {
+        const profile = store.gamificationProfile || {
+          total_xp: 0,
+          level: 1,
+          current_streak: 0,
+          longest_streak: 0,
+          meaningful_days: 0,
+          weekly_consistency_days: 0,
+          achievements_unlocked: [],
+        };
+        const txs = store.xpTransactions || [];
+
+        // XP by source type
+        const catMap: Record<string, number> = {
+          'Questões': 0,
+          'Material': 0,
+          'Memória': 0,
+          'Caderno de Erros': 0,
+          'Discursiva (P3)': 0,
+          'Simulados/Boss': 0,
+          'Missões': 0,
+          'Conquistas': 0,
+        };
+
+        txs.forEach((t) => {
+          if (t.source_type.includes('question')) catMap['Questões'] += t.amount;
+          else if (t.source_type.includes('material')) catMap['Material'] += t.amount;
+          else if (t.source_type.includes('flashcard')) catMap['Memória'] += t.amount;
+          else if (t.source_type.includes('error')) catMap['Caderno de Erros'] += t.amount;
+          else if (t.source_type.includes('discursive')) catMap['Discursiva (P3)'] += t.amount;
+          else if (t.source_type.includes('mock')) catMap['Simulados/Boss'] += t.amount;
+          else if (t.source_type.includes('mission')) catMap['Missões'] += t.amount;
+          else if (t.source_type.includes('achievement')) catMap['Conquistas'] += t.amount;
+        });
+
+        // Completed vs pending missions
+        let completedMissions = 0;
+        let totalMissions = 0;
+        Object.values(store.dailyMissions || {}).forEach((dayList) => {
+          dayList.forEach((m) => {
+            totalMissions++;
+            if (m.status === 'COMPLETED') completedMissions++;
+          });
+        });
+
+        return (
+          <Card className="p-6 space-y-4 border-zinc-800 bg-zinc-950/60">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-zinc-800">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Métricas da Jornada e Engajamento
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Esforço realizado e consistência da rotina (separadas das métricas acadêmicas).
+                </p>
+              </div>
+              <span className="text-xs font-mono font-bold text-amber-300 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                Nível {profile.level} • {profile.total_xp.toLocaleString('pt-BR')} XP Total
+              </span>
+            </div>
+
+            {/* Quick KPIs */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800">
+                <div className="text-[10px] text-zinc-400 uppercase font-semibold">Dias Significativos</div>
+                <div className="text-lg font-black text-white font-mono mt-0.5">
+                  {profile.meaningful_days} dias
+                </div>
+                <div className="text-[10px] text-zinc-400">Atividades reais executadas</div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800">
+                <div className="text-[10px] text-zinc-400 uppercase font-semibold">Maior Sequência</div>
+                <div className="text-lg font-black text-amber-400 font-mono mt-0.5">
+                  {profile.longest_streak} dias
+                </div>
+                <div className="text-[10px] text-zinc-400">Atual: {profile.current_streak} dias</div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800">
+                <div className="text-[10px] text-zinc-400 uppercase font-semibold">Missões Concluídas</div>
+                <div className="text-lg font-black text-emerald-400 font-mono mt-0.5">
+                  {completedMissions}
+                </div>
+                <div className="text-[10px] text-zinc-400">De {totalMissions} geradas</div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800">
+                <div className="text-[10px] text-zinc-400 uppercase font-semibold">Conquistas</div>
+                <div className="text-lg font-black text-purple-400 font-mono mt-0.5">
+                  {profile.achievements_unlocked.length} de 16
+                </div>
+                <div className="text-[10px] text-zinc-400">Marcos desbloqueados</div>
+              </div>
+            </div>
+
+            {/* XP by Category Breakdown */}
+            <div className="pt-2 space-y-2">
+              <h4 className="text-xs font-semibold text-zinc-300">XP por Categoria de Estudo</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {Object.entries(catMap).map(([category, amount]) => (
+                  <div key={category} className="p-2.5 rounded-lg bg-zinc-900/40 border border-zinc-800/80 text-xs">
+                    <span className="text-zinc-400 text-[11px] block">{category}</span>
+                    <span className="font-mono font-bold text-zinc-200">{amount} XP</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
     </div>
   );
 }

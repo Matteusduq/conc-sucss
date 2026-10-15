@@ -341,18 +341,33 @@ export interface UserStudySettings {
   desired_retention: number;
   today_available_minutes: number | null;
   updated_at: string;
+  gamification_show_animations?: boolean;
+  gamification_show_xp_toast?: boolean;
+  gamification_show_streak?: boolean;
+  gamification_weekly_target_days?: number;
 }
+
+export type MockExamType = 'WEEKLY_CHECKPOINT' | 'PARTIAL_MOCK' | 'FULL_MOCK';
 
 export interface MockExam {
   id: string;
   user_id: string;
   exam_id: string;
+  type?: MockExamType;
   performed_at: string;
   total_questions: number;
   correct: number;
   wrong: number;
   blank: number;
   net_points: number;
+  p1_correct?: number;
+  p1_wrong?: number;
+  p1_blank?: number;
+  p1_net?: number;
+  p2_correct?: number;
+  p2_wrong?: number;
+  p2_blank?: number;
+  p2_net?: number;
   duration_seconds: number | null;
   notes: string | null;
   created_at: string;

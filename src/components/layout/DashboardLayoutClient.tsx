@@ -7,11 +7,15 @@ import { Header } from './Header';
 import { TecSessionModal } from '@/components/performance/TecSessionModal';
 import { ErrorLogModal } from '@/components/performance/ErrorLogModal';
 import { CreateFlashcardModal } from '@/components/memory/CreateFlashcardModal';
+import { RecordMockModal } from '@/components/gamification/RecordMockModal';
+import { GamificationToast } from '@/components/gamification/GamificationToast';
+import { GamificationNotification } from '@/lib/gamification/types';
 import {
   loadStore,
   recordQuestionSessionAction,
   recordErrorLogAction,
   createFlashcardAction,
+  recordMockExamAction,
   AppStoreData,
 } from '@/lib/data/store';
 
@@ -19,14 +23,17 @@ interface ModalContextType {
   openTecModal: (topicId?: string) => void;
   openErrorModal: (topicId?: string) => void;
   openCardModal: (data?: { topicId?: string; front?: string; back?: string; errorId?: string }) => void;
+  openMockModal: () => void;
   store: AppStoreData;
   refreshStore: () => void;
+  pushNotification?: (notification: GamificationNotification) => void;
 }
 
 export const ModalContext = createContext<ModalContextType>({
   openTecModal: () => {},
   openErrorModal: () => {},
   openCardModal: () => {},
+  openMockModal: () => {},
   store: {} as AppStoreData,
   refreshStore: () => {},
 });
@@ -55,6 +62,13 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
     setStore(loadStore());
   }, []);
 
+  const [mockModalOpen, setMockModalOpen] = useState(false);
+  const [notifications, setNotifications] = useState<GamificationNotification[]>([]);
+
+  useEffect(() => {
+    setStore(loadStore());
+  }, []);
+
   const refreshStore = () => {
     setStore(loadStore());
   };
@@ -74,14 +88,38 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
     setCardModalOpen(true);
   };
 
+  const openMockModal = () => {
+    setMockModalOpen(true);
+  };
+
+  const pushNotification = (notif: GamificationNotification) => {
+    setNotifications((prev) => [...prev, notif]);
+  };
+
+  const dismissNotification = (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  // Auto-dismiss top notification after 4 seconds
+  useEffect(() => {
+    if (notifications.length > 0) {
+      const timer = setTimeout(() => {
+        setNotifications((prev) => prev.slice(1));
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [notifications]);
+
   return (
     <ModalContext.Provider
       value={{
         openTecModal,
         openErrorModal,
         openCardModal,
+        openMockModal,
         store,
         refreshStore,
+        pushNotification,
       }}
     >
       <div className="flex min-h-screen bg-zinc-950 text-zinc-100">
@@ -98,7 +136,38 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
         </div>
       </div>
 
+      {/* Gamification Toast Feedback */}
+      <GamificationToast
+        notifications={notifications}
+        onDismiss={dismissNotification}
+        enabled={store.settings?.gamification_show_xp_toast !== false}
+      />
+
       {/* Global Modals */}
+      <RecordMockModal
+        isOpen={mockModalOpen}
+        onClose={() => setMockModalOpen(false)}
+        onSave={(mockData) => {
+          const { store: updated } = recordMockExamAction(
+            {
+              ...mockData,
+              user_id: 'local-user',
+              exam_id: store.exam.id,
+            },
+            store
+          );
+          setStore(updated);
+          pushNotification({
+            id: `notif-mock-${Date.now()}`,
+            type: 'WEEKLY_BOSS_COMPLETED',
+            title: 'Checkpoint Salvo com Sucesso!',
+            message: `Registrado: ${mockData.p1_correct + mockData.p2_correct} certas, ${mockData.p1_wrong + mockData.p2_wrong} erradas.`,
+            xpAmount: 120,
+            timestamp: new Date().toISOString(),
+          });
+        }}
+      />
+
       <TecSessionModal
         isOpen={tecModalOpen}
         onClose={() => setTecModalOpen(false)}
@@ -115,6 +184,13 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
             store
           );
           setStore(updated);
+          pushNotification({
+            id: `notif-qs-${Date.now()}`,
+            type: 'XP_AWARDED',
+            title: 'Sessão de Questões Registrada!',
+            message: `${sessionData.total_questions} itens gravados com sucesso.`,
+            timestamp: new Date().toISOString(),
+          });
         }}
         onOpenErrorLog={(topicId) => {
           openErrorModal(topicId);
@@ -138,6 +214,14 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
             store
           );
           setStore(updated);
+          pushNotification({
+            id: `notif-err-${Date.now()}`,
+            type: 'XP_AWARDED',
+            title: 'Erro Cadastrado no Caderno!',
+            message: `Análise registrada (+5 XP).`,
+            xpAmount: 5,
+            timestamp: new Date().toISOString(),
+          });
         }}
       />
 

@@ -17,6 +17,21 @@ export default function ConfiguracoesPage() {
   const [highQ, setHighQ] = useState(store.settings.default_high_questions || 30);
   const [medQ, setMedQ] = useState(store.settings.default_medium_questions || 20);
   const [lowQ, setLowQ] = useState(store.settings.default_low_questions || 15);
+
+  // Gamification settings
+  const [showAnimations, setShowAnimations] = useState(
+    store.settings.gamification_show_animations !== false
+  );
+  const [showXpToast, setShowXpToast] = useState(
+    store.settings.gamification_show_xp_toast !== false
+  );
+  const [showStreak, setShowStreak] = useState(
+    store.settings.gamification_show_streak !== false
+  );
+  const [weeklyTargetDays, setWeeklyTargetDays] = useState(
+    store.settings.gamification_weekly_target_days || 6
+  );
+
   const [saved, setSaved] = useState(false);
 
   const handleSave = (e: React.FormEvent) => {
@@ -35,6 +50,10 @@ export default function ConfiguracoesPage() {
         default_high_questions: Number(highQ),
         default_medium_questions: Number(medQ),
         default_low_questions: Number(lowQ),
+        gamification_show_animations: showAnimations,
+        gamification_show_xp_toast: showXpToast,
+        gamification_show_streak: showStreak,
+        gamification_weekly_target_days: Number(weeklyTargetDays),
         updated_at: new Date().toISOString(),
       },
     };
@@ -269,7 +288,75 @@ export default function ConfiguracoesPage() {
           </div>
         </Card>
 
-        {/* 4. Integrações */}
+        {/* 4. Jornada e Gamificação */}
+        <Card className="p-5 space-y-4">
+          <CardHeader className="p-0">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              Jornada & Gamificação
+            </CardTitle>
+            <CardDescription>
+              Ajuste as preferências de feedback visual e metas de consistência semanal da jornada.
+            </CardDescription>
+          </CardHeader>
+
+          <div className="space-y-4 pt-2 text-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-semibold text-zinc-200 block">Feedback de XP e Notificações (Toast)</span>
+                <span className="text-[11px] text-zinc-400">
+                  Exibir pequenos avisos flutuantes ao concluir atividades e conquistar XP.
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={showXpToast}
+                onChange={(e) => setShowXpToast(e.target.checked)}
+                className="w-4 h-4 rounded accent-amber-500 cursor-pointer"
+              />
+            </div>
+
+            <div className="flex items-center justify-between border-t border-zinc-800/80 pt-3">
+              <div>
+                <span className="font-semibold text-zinc-200 block">Exibir Indicador de Sequência (Streak)</span>
+                <span className="text-[11px] text-zinc-400">
+                  Mostrar contador de dias consecutivos de estudo significativo na tela.
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={showStreak}
+                onChange={(e) => setShowStreak(e.target.checked)}
+                className="w-4 h-4 rounded accent-amber-500 cursor-pointer"
+              />
+            </div>
+
+            <div className="border-t border-zinc-800/80 pt-3 space-y-1.5">
+              <label className="block text-zinc-300 font-medium">
+                Meta de Consistência Semanal (Ritmo da Semana)
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="1"
+                  max="7"
+                  value={weeklyTargetDays}
+                  onChange={(e) => setWeeklyTargetDays(Math.min(7, Math.max(1, Number(e.target.value))))}
+                  className="w-24 bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-100 font-mono text-center"
+                />
+                <span className="text-[11px] text-zinc-400">
+                  dias com estudo significativo por semana (padrão: 6 dias).
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800/80 text-[11px] text-zinc-400 leading-relaxed">
+              <strong className="text-zinc-300 font-semibold">Integridade Acadêmica:</strong> O XP e o Nível são calculados de forma determinística e verificável através dos registros reais de estudo. Edição manual não é permitida para preservar a autenticidade e a motivação intrínseca da sua preparação.
+            </div>
+          </div>
+        </Card>
+
+        {/* 5. Integrações */}
         <Card className="p-5 space-y-3">
           <CardHeader className="p-0">
             <CardTitle className="text-sm">Status das Integrações</CardTitle>
