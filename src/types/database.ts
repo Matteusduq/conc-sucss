@@ -153,7 +153,9 @@ export interface Topic {
   priority_basis?: PriorityBasis;
   priority_confidence?: PriorityConfidence;
   cross_relevance?: CrossRelevance;
+  discursive_eligible?: boolean;
   is_discursive_relevant?: boolean;
+  discursive_synergy?: 'LOW' | 'MEDIUM' | 'HIGH';
   recommended_material_type: RecommendedMaterialType;
   status: TopicStatus;
   display_order: number;

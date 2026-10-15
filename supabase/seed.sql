@@ -1,5 +1,8 @@
--- seed.sql: Complete idempotent seed function for Câmara dos Deputados (Edital nº 1/2026)
--- Covers P1 (5 subjects), P2 (4 subjects), P3 (Discursive), 76 Topics, 81 Syllabus Items, and Placeholders.
+-- seed.sql: Scaffold parcial para Câmara dos Deputados (Edital nº 1/2026)
+-- Estrutura inicial: Exame, blocos (P1, P2, P3), 9 disciplinas e user_settings.
+-- NOTA DE ESCOPO: O seed SQL atual é um scaffold estrutural parcial.
+-- A inserção completa dos 76 Topics e 182 SyllabusItems (103 P1 + 79 P2)
+-- com seus respectivos mapeamentos será sincronizada na fase de integração do Supabase remoto.
 -- NO fake performance, NO fake questions, NO fake flashcards.
 
 CREATE OR REPLACE FUNCTION public.seed_camara_exam_data(p_user_id uuid)

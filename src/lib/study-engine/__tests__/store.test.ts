@@ -9,6 +9,8 @@ import {
 } from '@/lib/data/store';
 import { Rating } from 'ts-fsrs';
 
+import { INITIAL_SEED_DATA } from '@/lib/data/seed';
+
 describe('Data Store & Business Workflows Integration', () => {
   it('loads store with 76 Camara topics, 9 subjects and 3 exam blocks by default', () => {
     const store = loadStore();
@@ -16,7 +18,8 @@ describe('Data Store & Business Workflows Integration', () => {
     expect(store.subjects).toHaveLength(9);
     expect(store.topics).toHaveLength(76);
     expect(store.materials).toHaveLength(76);
-    expect(store.syllabusItems).toHaveLength(81);
+    expect(store.syllabusItems).toHaveLength(INITIAL_SEED_DATA.syllabusItems.length);
+    expect(store.syllabusItems).toHaveLength(182);
     expect(store.exam.name).toBe('Câmara dos Deputados 2027');
     expect(store.exam.p1_items).toBe(90);
     expect(store.exam.p2_items).toBe(90);

@@ -44,6 +44,8 @@ ALTER TABLE public.topics
   ADD COLUMN IF NOT EXISTS priority_basis text CHECK (priority_basis IN ('RESEARCH_AND_EDITAL', 'EDITAL_AND_ROLE', 'EDITAL_ONLY', 'USER_OVERRIDE')),
   ADD COLUMN IF NOT EXISTS priority_confidence text CHECK (priority_confidence IN ('HIGH', 'MEDIUM', 'LOW')),
   ADD COLUMN IF NOT EXISTS cross_relevance text CHECK (cross_relevance IN ('NONE', 'P1_P2', 'P2_P3', 'P1_P2_P3')),
+  ADD COLUMN IF NOT EXISTS discursive_eligible boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS discursive_synergy text CHECK (discursive_synergy IN ('LOW', 'MEDIUM', 'HIGH')),
   ADD COLUMN IF NOT EXISTS is_discursive_relevant boolean NOT NULL DEFAULT false;
 
 -- 5. SYLLABUS ITEMS (OFFICIAL EDITAL ITEMS)

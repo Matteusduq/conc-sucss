@@ -11,6 +11,15 @@ import {
   P3_MIN_POINTS,
 } from '@/types/database';
 import { INITIAL_SEED_DATA } from '@/lib/data/seed';
+import { P1_PORTUGUES_SYLLABUS } from '@/lib/data/seed/p1-portugues';
+import { P1_INGLES_SYLLABUS } from '@/lib/data/seed/p1-ingles';
+import { P1_ADMINISTRATIVO_SYLLABUS } from '@/lib/data/seed/p1-administrativo';
+import { P1_CONSTITUCIONAL_SYLLABUS } from '@/lib/data/seed/p1-constitucional';
+import { P1_TI_SYLLABUS } from '@/lib/data/seed/p1-ti';
+import { P2_LINGUISTICA_SYLLABUS } from '@/lib/data/seed/p2-linguistica';
+import { P2_TRANSCRICAO_IA_SYLLABUS } from '@/lib/data/seed/p2-transcricao-ia';
+import { P2_PROCESSO_LEGISLATIVO_SYLLABUS } from '@/lib/data/seed/p2-processo-legislativo';
+import { P2_CIENCIA_POLITICA_SYLLABUS } from '@/lib/data/seed/p2-ciencia-politica';
 import { calculateDiscursiveScore, validateDiscursiveInput } from '../discursive';
 import { calculateNetPoints } from '../domain';
 import { migrateV1ToV2 } from '@/lib/data/store';
@@ -107,6 +116,91 @@ describe('3. Integridade do Edital (SyllabusItems & Mapeamento)', () => {
     for (const topic of INITIAL_SEED_DATA.topics) {
       const links = INITIAL_SEED_DATA.topicSyllabusItems.filter((l) => l.topic_id === topic.id);
       expect(links.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('verifies exact P2 syllabus node counts according to Edital nº 1/2026 (Total P2 = 79)', () => {
+    expect(P2_LINGUISTICA_SYLLABUS).toHaveLength(31);
+    expect(P2_TRANSCRICAO_IA_SYLLABUS).toHaveLength(27);
+    expect(P2_PROCESSO_LEGISLATIVO_SYLLABUS).toHaveLength(10);
+    expect(P2_CIENCIA_POLITICA_SYLLABUS).toHaveLength(11);
+
+    const totalP2SyllabusItems =
+      P2_LINGUISTICA_SYLLABUS.length +
+      P2_TRANSCRICAO_IA_SYLLABUS.length +
+      P2_PROCESSO_LEGISLATIVO_SYLLABUS.length +
+      P2_CIENCIA_POLITICA_SYLLABUS.length;
+    expect(totalP2SyllabusItems).toBe(79);
+  });
+
+  it('verifies exact P1 syllabus node counts according to Edital nº 1/2026 (Total P1 = 103)', () => {
+    expect(P1_PORTUGUES_SYLLABUS).toHaveLength(20);
+    expect(P1_INGLES_SYLLABUS).toHaveLength(3);
+    expect(P1_ADMINISTRATIVO_SYLLABUS).toHaveLength(46);
+    expect(P1_CONSTITUCIONAL_SYLLABUS).toHaveLength(14);
+    expect(P1_TI_SYLLABUS).toHaveLength(20);
+
+    const totalP1SyllabusItems =
+      P1_PORTUGUES_SYLLABUS.length +
+      P1_INGLES_SYLLABUS.length +
+      P1_ADMINISTRATIVO_SYLLABUS.length +
+      P1_CONSTITUCIONAL_SYLLABUS.length +
+      P1_TI_SYLLABUS.length;
+    expect(totalP1SyllabusItems).toBe(103);
+    expect(INITIAL_SEED_DATA.syllabusItems).toHaveLength(182);
+  });
+
+  it('verifies official codes for P2 Ciência Política (1..11) and Processo Legislativo (1, 1.1..1.5, 2, 2.1, 3, 3.1)', () => {
+    const polCodes = P2_CIENCIA_POLITICA_SYLLABUS.map((i) => i.official_code);
+    expect(polCodes).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11']);
+
+    const legCodes = P2_PROCESSO_LEGISLATIVO_SYLLABUS.map((i) => i.official_code);
+    expect(legCodes).toEqual(['1', '1.1', '1.2', '1.3', '1.4', '1.5', '2', '2.1', '3', '3.1']);
+
+    const ingCodes = P1_INGLES_SYLLABUS.map((i) => i.official_code);
+    expect(ingCodes).toEqual(['1', '2', '3']);
+  });
+
+  it('verifies parent_item_id hierarchy for subitems in P2 and P1', () => {
+    // Processo Legislativo hierarchy
+    const legItem1 = P2_PROCESSO_LEGISLATIVO_SYLLABUS.find((i) => i.official_code === '1');
+    const legItem2 = P2_PROCESSO_LEGISLATIVO_SYLLABUS.find((i) => i.official_code === '2');
+    const legItem3 = P2_PROCESSO_LEGISLATIVO_SYLLABUS.find((i) => i.official_code === '3');
+    expect(legItem1?.parent_item_id).toBeNull();
+    expect(legItem2?.parent_item_id).toBeNull();
+    expect(legItem3?.parent_item_id).toBeNull();
+
+    for (let sub = 1; sub <= 5; sub++) {
+      const item = P2_PROCESSO_LEGISLATIVO_SYLLABUS.find((i) => i.official_code === `1.${sub}`);
+      expect(item?.parent_item_id).toBe(legItem1?.id);
+    }
+    const item21 = P2_PROCESSO_LEGISLATIVO_SYLLABUS.find((i) => i.official_code === '2.1');
+    expect(item21?.parent_item_id).toBe(legItem2?.id);
+    const item31 = P2_PROCESSO_LEGISLATIVO_SYLLABUS.find((i) => i.official_code === '3.1');
+    expect(item31?.parent_item_id).toBe(legItem3?.id);
+
+    // Linguistica hierarchy for item 3
+    const lingItem3 = P2_LINGUISTICA_SYLLABUS.find((i) => i.official_code === '3');
+    expect(lingItem3?.parent_item_id).toBeNull();
+    for (let sub = 1; sub <= 8; sub++) {
+      const item = P2_LINGUISTICA_SYLLABUS.find((i) => i.official_code === `3.${sub}`);
+      expect(item?.parent_item_id).toBe(lingItem3?.id);
+    }
+  });
+
+  it('verifies discursive_eligible rule: all P2 topics true, all P1 topics false', () => {
+    const p1Topics = INITIAL_SEED_DATA.topics.filter((t) => t.exam_block_code === 'P1');
+    const p2Topics = INITIAL_SEED_DATA.topics.filter((t) => t.exam_block_code === 'P2');
+
+    expect(p1Topics.length).toBeGreaterThan(0);
+    expect(p2Topics.length).toBeGreaterThan(0);
+
+    for (const topic of p2Topics) {
+      expect(topic.discursive_eligible).toBe(true);
+    }
+
+    for (const topic of p1Topics) {
+      expect(topic.discursive_eligible).toBe(false);
     }
   });
 });
@@ -257,7 +351,8 @@ describe('6. Migração Local v1 -> v2 e Consolidação de Tópicos', () => {
     expect(migrated.examBlocks).toHaveLength(3);
     expect(migrated.subjects).toHaveLength(9);
     expect(migrated.topics).toHaveLength(76);
-    expect(migrated.syllabusItems).toHaveLength(81);
+    expect(migrated.syllabusItems).toHaveLength(INITIAL_SEED_DATA.syllabusItems.length);
+    expect(migrated.syllabusItems).toHaveLength(182);
 
     // 2. Question sessions preserved and consolidated
     expect(migrated.questionSessions).toHaveLength(2);
