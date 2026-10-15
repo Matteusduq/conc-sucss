@@ -12,11 +12,39 @@ O sistema opera como um centro de comando pessoal para o concurso da **Câmara d
 3. Assuntos importantes e fracos sobem na fila diária;
 4. Assuntos importantes e já dominados entram em manutenção preventiva;
 5. Assuntos pouco importantes (LOW) não consomem tempo desproporcional;
-6. Questões continuam sendo feitas fora do sistema, no TEC Concursos.
+6. Questões continuam sendo feitas fora do sistema, no TEC Concursos;
+7. Prova Discursiva (P3) é avaliada em módulo próprio com métricas de redação técnica e penalização gramatical oficial.
 
 ---
 
-## 2. Prioridades de Prova e Formato Inicial de Estudo
+## 2. Modelagem do Edital: Unidade Prática (`Topic`) vs. Item Oficial (`SyllabusItem`)
+
+O sistema separa estritamente a granularidade normativa do edital da unidade pedagógica de estudo:
+
+- **`SyllabusItem` (Item Oficial do Edital):**
+  Preserva na íntegra a redação e hierarquia oficial divulgada pela Câmara dos Deputados (ex: *8.2 Tipos de gráficos: histograma, linha, barra, dispersão, box plot*). Não é transformado em um arquivo PDF individual para cada linha ou subtópico.
+  
+- **`Topic` (Unidade Prática de Estudo):**
+  Agrupa um ou mais `SyllabusItem` correlatos em uma unidade temática didática consistente (ex: *Visualização e storytelling de dados*).
+  
+- **Regra de Materiais:**
+  Existe exatamente **1 material/PDF para cada `Topic`**. Isso impede a proliferação caótica de dezenas de microarquivos isolados para microitens como "Histograma" ou "Box plot".
+
+---
+
+## 3. Avaliação Objetiva ($P_1$ e $P_2$) vs. Avaliação Discursiva ($P_3$)
+
+- **Blocos Objetivos ($P_1$ e $P_2$):**
+  Aferidos pelo `domain_score` (0–100), acurácia, pontuação líquida Cebraspe ($C - E$) e retenção FSRS.
+  
+- **Bloco Discursivo ($P_3$):**
+  Não utiliza `domain_score` nem percentuais objetivos. Avaliado por sessões de treino com pontuação de conteúdo ($NC$), contagem de erros de língua portuguesa ($NE$) e linhas efetivamente escritas ($TL$), aplicando as fórmulas oficiais:
+  - Questão de 20 linhas: $NQ_i = \max(0, NC_i - 3 \times \frac{NE_i}{TL_i})$ ($NC_i \le 15$);
+  - Peça Técnica de 50 linhas: $NPT = \max(0, NC - 6 \times \frac{NE}{TL})$ ($NC \le 30$).
+
+---
+
+## 4. Prioridades de Prova e Formato Inicial de Estudo
 Cada tópico do edital possui classificação de prioridade inicial:
 
 | Prioridade | Formato de Material | Fluxo Obrigatório de Estudo |

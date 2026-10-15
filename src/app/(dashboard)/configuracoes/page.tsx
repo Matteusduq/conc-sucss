@@ -10,6 +10,7 @@ import { saveStore } from '@/lib/data/store';
 
 export default function ConfiguracoesPage() {
   const { store, refreshStore } = useModal();
+  const [examDate, setExamDate] = useState(store.exam.exam_date || '2027-01-17');
   const [weeklyMinutes, setWeeklyMinutes] = useState(store.settings.weekly_study_target_minutes || 1080);
   const [memoryMinutes, setMemoryMinutes] = useState(store.settings.memory_daily_minutes || 25);
   const [desiredRetention, setDesiredRetention] = useState(store.settings.desired_retention || 0.90);
@@ -22,6 +23,10 @@ export default function ConfiguracoesPage() {
     e.preventDefault();
     const updatedStore = {
       ...store,
+      exam: {
+        ...store.exam,
+        exam_date: examDate,
+      },
       settings: {
         ...store.settings,
         weekly_study_target_minutes: Number(weeklyMinutes),
@@ -49,7 +54,7 @@ export default function ConfiguracoesPage() {
             Configurações do Sistema
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Parâmetros do concurso da Câmara dos Deputados, metas de estudo e calibração da retenção FSRS.
+            Parâmetros oficiais do edital da Câmara dos Deputados, data da prova e calibração do estudo.
           </p>
         </div>
       </div>
@@ -60,15 +65,15 @@ export default function ConfiguracoesPage() {
           <CardHeader className="p-0">
             <CardTitle className="text-sm flex items-center gap-2">
               <Shield className="w-4 h-4 text-zinc-400" />
-              Parâmetros do Concurso e Banca Examinadora
+              Parâmetros Oficiais do Concurso (Edital nº 1/2026)
             </CardTitle>
             <CardDescription>
-              Configuração oficial do edital e modelo de pontuação.
+              Configuração oficial do cargo de Registro e Redação (valores fixos do edital e data configurável).
             </CardDescription>
           </CardHeader>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-2">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs pt-2">
+            <div className="sm:col-span-2">
               <label className="block text-zinc-400 mb-1">Órgão e Cargo</label>
               <input
                 type="text"
@@ -78,21 +83,69 @@ export default function ConfiguracoesPage() {
               />
             </div>
             <div>
-              <label className="block text-zinc-400 mb-1">Banca e Data da Prova</label>
+              <label className="block text-zinc-400 mb-1">Banca</label>
               <input
                 type="text"
                 disabled
-                value={`${store.exam.exam_board} • ${store.exam.exam_date}`}
+                value={store.exam.exam_board}
                 className="w-full bg-zinc-900/60 border border-zinc-800 rounded-lg p-2 text-zinc-300 font-mono cursor-not-allowed"
               />
             </div>
           </div>
 
-          <div className="p-3 bg-zinc-900/40 rounded-lg border border-zinc-800 text-xs text-zinc-400 flex items-center justify-between">
-            <span>
-              Modelo de Pontuação Cebraspe: <strong className="text-zinc-200">1 Certa (+1 pt) • 1 Errada (-1 pt) • Em Branco (0 pt)</strong>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label className="block text-zinc-300 font-medium mb-1">
+                Data Prevista da Prova (Configurável)
+              </label>
+              <input
+                type="date"
+                value={examDate}
+                onChange={(e) => setExamDate(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-100 font-mono"
+              />
+              <span className="text-[10px] text-zinc-500 mt-1 block">
+                Edital prevê 17/01/2027 (manhã: objetivas P1+P2; tarde: discursiva P3).
+              </span>
+            </div>
+            <div>
+              <label className="block text-zinc-400 mb-1">Critérios de Avaliação Cebraspe</label>
+              <div className="p-2 bg-zinc-900/60 border border-zinc-800 rounded-lg text-zinc-300 font-mono text-xs">
+                +1 pt (certo) • -1 pt (errado) • 0 pt (branco)
+              </div>
+            </div>
+          </div>
+
+          {/* Readonly Official Exam Parameters */}
+          <div className="pt-3 border-t border-zinc-800/80">
+            <span className="text-xs font-semibold text-zinc-300 block mb-2">
+              Estrutura Oficial de Itens e Mínimos Eliminatórios (Readonly)
             </span>
-            <Badge variant="high">Cebraspe Ativo</Badge>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-2.5 bg-zinc-900/80 border border-zinc-800 rounded-lg">
+                <span className="text-[10px] text-zinc-400 font-mono block">P1 — BÁSICOS</span>
+                <span className="text-sm font-bold text-zinc-100 font-mono">90 itens</span>
+                <span className="text-[10px] text-zinc-400 block mt-0.5">Mínimo: <strong className="text-amber-400">18 pts</strong></span>
+              </div>
+              <div className="p-2.5 bg-zinc-900/80 border border-zinc-800 rounded-lg">
+                <span className="text-[10px] text-zinc-400 font-mono block">P2 — ESPECÍFICOS</span>
+                <span className="text-sm font-bold text-zinc-100 font-mono">90 itens</span>
+                <span className="text-[10px] text-zinc-400 block mt-0.5">Mínimo: <strong className="text-amber-400">27 pts</strong></span>
+              </div>
+              <div className="p-2.5 bg-zinc-900/80 border border-zinc-800 rounded-lg">
+                <span className="text-[10px] text-zinc-400 font-mono block">P1 + P2 TOTAL</span>
+                <span className="text-sm font-bold text-zinc-100 font-mono">180 itens</span>
+                <span className="text-[10px] text-zinc-400 block mt-0.5">Mínimo: <strong className="text-amber-400">54 pts</strong></span>
+              </div>
+              <div className="p-2.5 bg-zinc-900/80 border border-zinc-800 rounded-lg">
+                <span className="text-[10px] text-zinc-400 font-mono block">P3 — DISCURSIVA</span>
+                <span className="text-sm font-bold text-zinc-100 font-mono">60 pontos</span>
+                <span className="text-[10px] text-zinc-400 block mt-0.5">Mínimo: <strong className="text-amber-400">30 pts</strong></span>
+              </div>
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-2">
+              * Nota: Os mínimos acima são critérios estritamente eliminatórios do Cebraspe, não metas de aprovação.
+            </p>
           </div>
         </Card>
 

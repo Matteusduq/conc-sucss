@@ -31,6 +31,19 @@ export type CardType = 'CONTENT' | 'ERROR' | 'COMPARISON' | 'RULE' | 'CEBRASPE_T
 export type FlashcardSourceType = 'MANUAL' | 'MATERIAL' | 'ERROR_LOG' | 'AI_GENERATED';
 export type FsrsRating = 'AGAIN' | 'HARD' | 'GOOD' | 'EASY';
 
+export type ExamBlockCode = 'P1' | 'P2' | 'P3';
+export type PriorityBasis =
+  | 'RESEARCH_AND_EDITAL'
+  | 'EDITAL_AND_ROLE'
+  | 'EDITAL_ONLY'
+  | 'USER_OVERRIDE';
+export type PriorityConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+export type CrossRelevance = 'NONE' | 'P1_P2' | 'P2_P3' | 'P1_P2_P3';
+
+export type DiscursiveType =
+  | 'QUESTION_20_LINES'
+  | 'TECHNICAL_PIECE_50_LINES';
+
 export interface Profile {
   id: string;
   display_name: string | null;
@@ -54,7 +67,34 @@ export interface Exam {
   correct_points: number;
   wrong_points: number;
   blank_points: number;
+  objective_duration_minutes?: number; // 300
+  discursive_duration_minutes?: number; // 180
+  p1_items?: number; // 90
+  p2_items?: number; // 90
+  p1_min_points?: number; // 18
+  p2_min_points?: number; // 27
+  objective_total_min_points?: number; // 54
+  p3_max_points?: number; // 60
+  p3_min_points?: number; // 30
+  official_notice_date?: string; // 2026-10-02
+  tiebreaker_rules?: string[];
   active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExamBlock {
+  id: string;
+  user_id: string;
+  exam_id: string;
+  code: ExamBlockCode;
+  name: string;
+  block_type: 'OBJECTIVE' | 'DISCURSIVE';
+  total_items: number | null;
+  max_points: number;
+  minimum_points: number | null;
+  duration_minutes: number | null;
+  display_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -63,6 +103,8 @@ export interface Subject {
   id: string;
   user_id: string;
   exam_id: string;
+  exam_block_id?: string;
+  exam_block_code?: ExamBlockCode;
   name: string;
   slug: string;
   display_order: number;
@@ -72,11 +114,34 @@ export interface Subject {
   updated_at: string;
 }
 
+export interface SyllabusItem {
+  id: string;
+  user_id: string;
+  exam_id: string;
+  exam_block_id: string;
+  subject_id: string;
+  parent_item_id: string | null;
+  official_code: string | null;
+  official_text: string;
+  display_order: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TopicSyllabusItem {
+  topic_id: string;
+  syllabus_item_id: string;
+  user_id?: string;
+}
+
 export interface Topic {
   id: string;
   user_id: string;
   exam_id: string;
   subject_id: string;
+  exam_block_id?: string;
+  exam_block_code?: 'P1' | 'P2';
   parent_topic_id: string | null;
   name: string;
   slug: string;
@@ -85,6 +150,10 @@ export interface Topic {
   priority_label: string | null;
   priority_weight: number;
   priority_source: string | null;
+  priority_basis?: PriorityBasis;
+  priority_confidence?: PriorityConfidence;
+  cross_relevance?: CrossRelevance;
+  is_discursive_relevant?: boolean;
   recommended_material_type: RecommendedMaterialType;
   status: TopicStatus;
   display_order: number;
@@ -240,6 +309,26 @@ export interface FlashcardReview {
   created_at: string;
 }
 
+export interface DiscursiveSession {
+  id: string;
+  user_id: string;
+  exam_id: string;
+  type: DiscursiveType;
+  performed_at: string;
+  title: string | null;
+  prompt_summary: string | null;
+  related_subject_id: string | null;
+  related_topic_id: string | null;
+  duration_seconds: number | null;
+  lines_written: number;
+  content_score: number;
+  language_errors: number;
+  calculated_score: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface UserStudySettings {
   user_id: string;
   weekly_study_target_minutes?: number;
@@ -287,3 +376,15 @@ export interface AIInsight {
   model: string | null;
   generated_at: string;
 }
+
+// Official Exam Integrity Constants (Edital nº 1 — Câmara dos Deputados — Cargo 11)
+export const P1_SUBJECT_COUNT = 5;
+export const P2_SUBJECT_COUNT = 4;
+export const P1_ITEM_COUNT = 90;
+export const P2_ITEM_COUNT = 90;
+export const P3_MAX_POINTS = 60;
+export const P1_MIN_POINTS = 18;
+export const P2_MIN_POINTS = 27;
+export const OBJECTIVE_TOTAL_MIN_POINTS = 54;
+export const P3_MIN_POINTS = 30;
+

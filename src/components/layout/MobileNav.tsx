@@ -13,6 +13,7 @@ import {
   AlertOctagon,
   BarChart3,
   Settings,
+  PenTool,
   X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
@@ -29,6 +30,7 @@ export function MobileNav() {
   ];
 
   const moreTabs = [
+    { href: '/discursiva', label: 'Discursiva', icon: PenTool },
     { href: '/biblioteca', label: 'Biblioteca', icon: BookMarked },
     { href: '/erros', label: 'Caderno de Erros', icon: AlertOctagon },
     { href: '/analytics', label: 'Analytics', icon: BarChart3 },

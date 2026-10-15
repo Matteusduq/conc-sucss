@@ -25,15 +25,15 @@ export function generateDailyPlan(context: PlannerContext): TodayPlanSummary {
   } = context;
 
   // Derive available minutes from settings or weekly target (1080 / 6 days ~ 180 min/day default)
-  const availableMinutes = availableMinutesToday && availableMinutesToday > 0
-    ? availableMinutesToday
-    : Math.round(weeklyTargetMinutes / 6);
+  const availableMinutes =
+    availableMinutesToday && availableMinutesToday > 0
+      ? availableMinutesToday
+      : Math.round(weeklyTargetMinutes / 6);
 
   // Suggested daily distribution:
   // Default: 45% theory/material, 30% TEC questions, 20% memory, 5% buffer
   let memoryMinutes = Math.min(30, Math.round(availableMinutes * 0.20));
   if (overdueCardsCount > 15) {
-    // Increase memory up to 25-30% if heavy backlog, but cap strictly at 35 mins
     memoryMinutes = Math.min(35, Math.round(availableMinutes * 0.25));
   }
   if (overdueCardsCount === 0) {
@@ -48,7 +48,7 @@ export function generateDailyPlan(context: PlannerContext): TodayPlanSummary {
   const subjectMap = new Map(subjects.map((s) => [s.id, s.name]));
   const materialByTopic = new Map(materials.map((m) => [m.topic_id, m]));
 
-  // Rank topics by study_score descending
+  // Rank topics by study_score descending (considers both P1 and P2 topics)
   const sortedTopics = [...topics].sort((a, b) => b.study_score - a.study_score);
 
   const tasks: TodayTask[] = [];
@@ -61,8 +61,9 @@ export function generateDailyPlan(context: PlannerContext): TodayPlanSummary {
   );
 
   criticalTopics.slice(0, 3).forEach((t) => {
+    const blockLabel = t.exam_block_code ? `[${t.exam_block_code}] ` : '';
     alerts.push(
-      `Alerta de Risco: "${t.name}" (${subjectMap.get(t.subject_id) ?? 'Geral'}) exige atenção imediata devido ao baixo domínio.`
+      `Alerta de Risco: ${blockLabel}"${t.name}" (${subjectMap.get(t.subject_id) ?? 'Geral'}) exige atenção imediata devido ao baixo domínio.`
     );
   });
 
@@ -105,7 +106,6 @@ export function generateDailyPlan(context: PlannerContext): TodayPlanSummary {
         actionLabel = topic.status === 'NOT_STARTED' ? 'Iniciar leitura do material' : 'Continuar leitura';
         reason = `Conteúdo ${topic.priority === 'HIGH' ? 'de altíssima relevância no edital' : 'previsto no edital'}.`;
       } else {
-        // Material not yet uploaded -> direct to TEC questions or concept study
         actionType = 'TEC_QUESTIONS';
         actionLabel = 'Praticar no TEC Concursos';
         reason = `Material PDF aguardando upload. Recomendado iniciar contato prévio via questões filtradas no TEC.`;
@@ -131,6 +131,7 @@ export function generateDailyPlan(context: PlannerContext): TodayPlanSummary {
       subjectId: topic.subject_id,
       subjectName,
       topicName: topic.name,
+      examBlockCode: topic.exam_block_code,
       priority: topic.priority,
       recommendedMaterialType: topic.recommended_material_type,
       actionType,
@@ -140,13 +141,14 @@ export function generateDailyPlan(context: PlannerContext): TodayPlanSummary {
       studyScore: topic.study_score,
       domainScore: topic.domain_score,
       domainConfidence: topic.domain_confidence,
+      crossRelevance: topic.cross_relevance,
+      isDiscursiveRelevant: topic.is_discursive_relevant,
       targetQuestions: topic.priority === 'HIGH' ? 30 : topic.priority === 'MEDIUM' ? 20 : 15,
     });
 
     allocatedMinutes += estimated;
   }
 
-  // Calculate theory vs questions split based on allocated tasks
   const theoryMinutes = tasks
     .filter((t) => t.actionType === 'READ_MATERIAL')
     .reduce((sum, t) => sum + t.estimatedMinutes, 0);
@@ -179,10 +181,14 @@ export function generateDeterministicInsights(params: {
   const insights: string[] = [];
 
   // Insight 1: HIGH and domain_score < 60
-  const highLowDomain = topics.filter((t) => t.priority === 'HIGH' && (t.domain_score ?? 0) < 60 && t.status !== 'NOT_STARTED');
+  const highLowDomain = topics.filter(
+    (t) => t.priority === 'HIGH' && (t.domain_score ?? 0) < 60 && t.status !== 'NOT_STARTED'
+  );
   if (highLowDomain.length > 0) {
+    const t = highLowDomain[0];
+    const prefix = t.exam_block_code ? `[${t.exam_block_code}] ` : '';
     insights.push(
-      `Tópico crítico: "${highLowDomain[0].name}" é prioritário para a prova e seu domínio ainda está baixo (${highLowDomain[0].domain_score ?? 0}%).`
+      `Tópico crítico: ${prefix}"${t.name}" é prioritário para a prova e seu domínio ainda está baixo (${t.domain_score ?? 0}%).`
     );
   }
 

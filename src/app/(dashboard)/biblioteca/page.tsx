@@ -12,16 +12,28 @@ import { formatDateBr } from '@/lib/utils/date';
 
 export default function BibliotecaPage() {
   const { store, openTecModal } = useModal();
-  const [activeTab, setActiveTab] = useState<string>('ALL');
+  const [selectedBlock, setSelectedBlock] = useState<'ALL' | 'P1' | 'P2'>('ALL');
+  const [selectedSubject, setSelectedSubject] = useState<string>('ALL');
 
-  const subjectMap = new Map(store.subjects.map((s) => [s.id, s.name]));
+  const subjectMap = new Map(store.subjects.map((s) => [s.id, s]));
   const topicMap = new Map(store.topics.map((t) => [t.id, t]));
 
   const filteredMaterials = store.materials.filter((material) => {
-    if (activeTab === 'ALL') return true;
     const topic = topicMap.get(material.topic_id);
-    return topic && topic.subject_id === activeTab;
+    if (!topic) return false;
+
+    if (selectedBlock !== 'ALL' && topic.exam_block_code !== selectedBlock) {
+      return false;
+    }
+    if (selectedSubject !== 'ALL' && topic.subject_id !== selectedSubject) {
+      return false;
+    }
+    return true;
   });
+
+  const availableSubjects = store.subjects.filter(
+    (s) => selectedBlock === 'ALL' || s.exam_block_code === selectedBlock
+  );
 
   return (
     <div className="space-y-6">
@@ -32,7 +44,7 @@ export default function BibliotecaPage() {
             Biblioteca de Materiais de Estudo
           </h1>
           <p className="text-xs text-zinc-400 mt-1">
-            Gestão dos PDFs completos, simplificados e resumos vinculados a cada tópico do edital.
+            Materiais estruturados por Unidade de Estudo (76 placeholders correspondendo às unidades de P1 e P2).
           </p>
         </div>
       </div>
@@ -42,27 +54,52 @@ export default function BibliotecaPage() {
         <UploadCloud className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
         <div className="space-y-1">
           <p className="font-semibold text-zinc-100">
-            Estrutura de Storage Preparada (Release MVP)
+            Estrutura de Storage Preparada (Release Fase 1)
           </p>
           <p className="text-zinc-400 leading-relaxed text-[11px]">
-            Todos os 94 tópicos do edital já estão cadastrados com seus respectivos placeholders de material pedagógico (PDF Completo para HIGH, Simplificado para MEDIUM e Resumo para LOW). Os arquivos reais serão inseridos via bucket privado do Supabase Storage.
+            Cada unidade de estudo possui exatamente 1 placeholder de material pedagógico (PDF Completo para HIGH, Simplificado para MEDIUM e Resumo para LOW), cobrindo múltiplos itens correlatos do edital sem dispersão. Os arquivos reais serão inseridos via bucket privado do Supabase Storage.
           </p>
         </div>
+      </div>
+
+      {/* Block Tabs: ALL, P1, P2 */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-zinc-400 font-medium mr-1">Bloco:</span>
+        {(['ALL', 'P1', 'P2'] as const).map((block) => (
+          <button
+            key={block}
+            onClick={() => {
+              setSelectedBlock(block);
+              setSelectedSubject('ALL');
+            }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              selectedBlock === block
+                ? 'bg-zinc-100 text-zinc-950 shadow-sm'
+                : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800/60'
+            }`}
+          >
+            {block === 'ALL'
+              ? 'Todos os Blocos'
+              : block === 'P1'
+              ? 'P1 — Conhecimentos Básicos'
+              : 'P2 — Conhecimentos Específicos'}
+          </button>
+        ))}
       </div>
 
       {/* Discipline Tabs */}
       <div className="flex flex-wrap gap-2 pb-2 border-b border-zinc-800/80">
         <button
-          onClick={() => setActiveTab('ALL')}
+          onClick={() => setSelectedSubject('ALL')}
           className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-            activeTab === 'ALL'
-              ? 'bg-zinc-100 text-zinc-950 font-bold'
+            selectedSubject === 'ALL'
+              ? 'bg-zinc-800 text-zinc-100 font-bold border border-zinc-700'
               : 'bg-zinc-900 text-zinc-400 hover:text-white'
           }`}
         >
-          Todas ({store.materials.length})
+          Todas as Disciplinas ({filteredMaterials.length})
         </button>
-        {store.subjects.map((s) => {
+        {availableSubjects.map((s) => {
           const count = store.materials.filter((m) => {
             const top = topicMap.get(m.topic_id);
             return top && top.subject_id === s.id;
@@ -71,14 +108,14 @@ export default function BibliotecaPage() {
           return (
             <button
               key={s.id}
-              onClick={() => setActiveTab(s.id)}
+              onClick={() => setSelectedSubject(s.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                activeTab === s.id
-                  ? 'bg-zinc-100 text-zinc-950 font-bold'
+                selectedSubject === s.id
+                  ? 'bg-zinc-800 text-zinc-100 font-bold border border-zinc-700'
                   : 'bg-zinc-900 text-zinc-400 hover:text-white'
               }`}
             >
-              {s.name} ({count})
+              [{s.exam_block_code}] {s.name} ({count})
             </button>
           );
         })}
@@ -88,87 +125,94 @@ export default function BibliotecaPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredMaterials.map((material) => {
           const topic = topicMap.get(material.topic_id);
+          const subject = topic ? subjectMap.get(topic.subject_id) : undefined;
           const progress = store.materialProgress[material.id];
           const hasFile = material.status === 'AVAILABLE' && Boolean(material.storage_path);
 
           return (
             <Card
               key={material.id}
-              className="flex flex-col justify-between hover:border-zinc-700/80 transition-all"
+              className="flex flex-col justify-between hover:border-zinc-700/80 transition-all p-5 bg-zinc-900/40 border-zinc-800"
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
-                    {topic ? subjectMap.get(topic.subject_id) : 'Geral'}
-                  </span>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      {topic?.exam_block_code && (
+                        <span
+                          className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                            topic.exam_block_code === 'P1'
+                              ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                              : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                          }`}
+                        >
+                          {topic.exam_block_code}
+                        </span>
+                      )}
+                      <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                        {subject?.name || 'Geral'}
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-zinc-100 tracking-tight mt-1 line-clamp-2">
+                      {material.title}
+                    </h3>
+                  </div>
                   {topic && <PriorityBadge priority={topic.priority} />}
                 </div>
 
-                <div>
-                  <h3 className="text-sm font-bold text-zinc-100 leading-snug">
-                    {material.title}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <Badge variant="neutral" className="text-[10px]">
-                      {material.material_type}
-                    </Badge>
-                    <Badge
-                      variant={hasFile ? 'success' : 'warning'}
-                      className="text-[10px]"
-                    >
-                      {hasFile ? 'Disponível' : 'Aguardando PDF'}
-                    </Badge>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant={hasFile ? 'success' : 'neutral'}>
+                    {hasFile ? 'Disponível' : 'Aguardando PDF'}
+                  </Badge>
+                  <span className="text-[11px] font-mono text-zinc-400">
+                    {material.material_type}
+                  </span>
                 </div>
 
-                {/* Progress bar */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px] text-zinc-400">
-                    <span>Progresso de leitura</span>
-                    <span className="font-mono font-bold text-zinc-300">
-                      {progress ? `${progress.progress_percent}%` : '0%'}
-                    </span>
+                {/* Progress bar if opened */}
+                {progress && (
+                  <div className="space-y-1 pt-1">
+                    <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
+                      <span>Progresso</span>
+                      <span>{progress.progress_percent}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                      <div
+                        className="bg-blue-500 h-full rounded-full"
+                        style={{ width: `${progress.progress_percent}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-zinc-500 font-mono pt-0.5">
+                      <span>Página {progress.current_page} de {progress.max_page_reached}</span>
+                      <span>Último: {formatDateBr(progress.last_opened_at)}</span>
+                    </div>
                   </div>
-                  <div className="w-full h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-                    <div
-                      className="bg-blue-500 h-full rounded-full transition-all"
-                      style={{ width: `${progress ? progress.progress_percent : 0}%` }}
-                    />
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Actions Footer */}
-              <div className="mt-4 pt-3 border-t border-zinc-800/80 flex items-center justify-between gap-2">
-                <div className="text-[10px] text-zinc-400 font-mono">
-                  {progress?.last_opened_at
-                    ? `Lido em ${formatDateBr(progress.last_opened_at)}`
-                    : 'Ainda não aberto'}
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  {topic && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => openTecModal(topic.id)}
-                      className="text-[11px] px-2 py-1"
-                      title="Registrar sessão TEC"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                  <Link href={`/estudar/${material.topic_id}`}>
-                    <Button
-                      size="sm"
-                      variant={hasFile ? 'primary' : 'outline'}
-                      className="text-xs"
-                    >
-                      <BookOpen className="w-3.5 h-3.5 mr-1" />
-                      {hasFile ? 'Ler Material' : 'Detalhes'}
-                    </Button>
-                  </Link>
-                </div>
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-zinc-800/60 mt-4 flex items-center justify-between gap-2">
+                <Link href={`/estudar/${material.topic_id}`} className="flex-1">
+                  <Button
+                    size="sm"
+                    variant={hasFile ? 'primary' : 'outline'}
+                    className="w-full text-xs"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 mr-1" />
+                    {hasFile ? 'Abrir no Leitor' : 'Ver Detalhes'}
+                  </Button>
+                </Link>
+                {topic && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => openTecModal(topic.id)}
+                    title="Resolver questões deste tópico no TEC"
+                    className="text-xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </Button>
+                )}
               </div>
             </Card>
           );

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { BookOpen, ExternalLink, RefreshCw, AlertCircle, Clock } from 'lucide-react';
+import { BookOpen, ExternalLink, RefreshCw, AlertCircle, Clock, PenTool } from 'lucide-react';
 import { TodayTask } from '@/types/study';
 import { PriorityBadge } from '@/components/study/PriorityBadge';
 import { DomainScore } from '@/components/study/DomainScore';
@@ -40,10 +40,29 @@ export function TodayTaskCard({ task, onOpenTecModal, onOpenMaterial }: TodayTas
         {/* Subject & Badges */}
         <div className="flex items-start justify-between gap-2">
           <div>
-            <span className="text-[11px] font-semibold text-zinc-400 tracking-wider uppercase">
-              {task.subjectName}
-            </span>
-            <h4 className="text-base font-bold text-zinc-100 tracking-tight mt-0.5 leading-snug">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {task.examBlockCode && (
+                <span
+                  className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                    task.examBlockCode === 'P1'
+                      ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                      : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                  }`}
+                >
+                  {task.examBlockCode}
+                </span>
+              )}
+              <span className="text-[11px] font-semibold text-zinc-400 tracking-wider uppercase">
+                {task.subjectName}
+              </span>
+              {task.isDiscursiveRelevant && (
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                  <PenTool className="w-2.5 h-2.5" />
+                  Discursiva
+                </span>
+              )}
+            </div>
+            <h4 className="text-base font-bold text-zinc-100 tracking-tight mt-1 leading-snug">
               {task.topicName}
             </h4>
           </div>

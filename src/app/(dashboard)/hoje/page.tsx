@@ -9,7 +9,7 @@ import { generateDailyPlan, generateDeterministicInsights } from '@/lib/study-en
 import { getDueFlashcards } from '@/lib/data/store';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { AlertTriangle, Brain, Sparkles, Clock, CheckCircle } from 'lucide-react';
+import { AlertTriangle, Brain, Sparkles, BookOpen, PenTool, CheckCircle, Info } from 'lucide-react';
 import Link from 'next/link';
 
 export default function HojePage() {
@@ -53,6 +53,14 @@ export default function HojePage() {
     .reduce((sum, s) => sum + (s.duration_seconds || 0), 0);
   const weeklyStudiedMinutes = Math.round(studiedSecondsThisWeek / 60);
 
+  // Block metrics for P1, P2 and P3
+  const p1Topics = store.topics.filter((t) => t.exam_block_code === 'P1');
+  const p2Topics = store.topics.filter((t) => t.exam_block_code === 'P2');
+  const p1StartedCount = p1Topics.filter((t) => t.status !== 'NOT_STARTED').length;
+  const p2StartedCount = p2Topics.filter((t) => t.status !== 'NOT_STARTED').length;
+  const p3SessionsCount = (store.discursiveSessions || []).length;
+  const isPreparationUnstarted = totalQuestions === 0 && p1StartedCount === 0 && p2StartedCount === 0 && p3SessionsCount === 0;
+
   return (
     <div className="space-y-6">
       {/* 1. Header & Exam Countdown */}
@@ -62,7 +70,60 @@ export default function HojePage() {
         examDate={store.exam.exam_date}
       />
 
-      {/* 2. Top Metric KPIs */}
+      {/* 2. State of preparation (P1, P2, P3 status block) */}
+      <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/40 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Info className="w-4 h-4 text-zinc-400" />
+            <h3 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+              {isPreparationUnstarted ? 'Preparação ainda não iniciada' : 'Progresso Estrutural dos Blocos'}
+            </h3>
+          </div>
+          <span className="text-[11px] text-zinc-400 font-mono">
+            Edital nº 1/2026 — Registro e Redação
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+          {/* P1 */}
+          <div className="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-blue-400 font-mono">P1 — Conhecimentos Básicos</span>
+              <span className="text-[10px] text-zinc-400">90 itens • mín. 18</span>
+            </div>
+            <div className="text-sm font-semibold text-zinc-200 mt-1">
+              {p1StartedCount === 0 ? 'Não iniciado' : `${p1StartedCount} de ${p1Topics.length} unidades`}
+            </div>
+            <div className="text-[10px] text-zinc-400 mt-0.5">5 disciplinas (Português, Inglês, Adm, Const, TI)</div>
+          </div>
+
+          {/* P2 */}
+          <div className="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-purple-400 font-mono">P2 — Conhecimentos Específicos</span>
+              <span className="text-[10px] text-zinc-400">90 itens • mín. 27</span>
+            </div>
+            <div className="text-sm font-semibold text-zinc-200 mt-1">
+              {p2StartedCount === 0 ? 'Não iniciado' : `${p2StartedCount} de ${p2Topics.length} unidades`}
+            </div>
+            <div className="text-[10px] text-zinc-400 mt-0.5">4 disciplinas (Linguística, ASR/IA, Legislação, Pol.)</div>
+          </div>
+
+          {/* P3 */}
+          <div className="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-amber-400 font-mono">P3 — Prova Discursiva</span>
+              <span className="text-[10px] text-zinc-400">60 pts • mín. 30</span>
+            </div>
+            <div className="text-sm font-semibold text-zinc-200 mt-1">
+              {p3SessionsCount === 0 ? 'Sem treino registrado' : `${p3SessionsCount} treino(s) registrado(s)`}
+            </div>
+            <div className="text-[10px] text-zinc-400 mt-0.5">2 questões (até 20L) + 1 peça técnica (até 50L)</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Top Metric KPIs */}
       <DashboardKPIs
         weeklyStudiedMinutes={weeklyStudiedMinutes}
         weeklyTargetMinutes={store.settings.weekly_study_target_minutes || 1080}
@@ -77,7 +138,7 @@ export default function HojePage() {
         atRiskTopicsCount={atRiskTopics.length}
       />
 
-      {/* 3. Alerts Section (if any alerts) */}
+      {/* 4. Alerts Section (if any alerts) */}
       {plan.alerts.length > 0 && (
         <div className="space-y-2">
           {plan.alerts.map((alert, idx) => (
@@ -92,7 +153,7 @@ export default function HojePage() {
         </div>
       )}
 
-      {/* 4. Time Distribution & Daily Balance */}
+      {/* 5. Time Distribution & Daily Balance */}
       <Card className="p-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800">
           <div>
@@ -144,7 +205,7 @@ export default function HojePage() {
         </div>
       </Card>
 
-      {/* 5. Memory / Flashcards Callout */}
+      {/* 6. Memory / Flashcards Callout */}
       <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-start gap-3">
           <div className="p-2.5 rounded-xl bg-purple-950/60 border border-purple-900/80 text-purple-300">
@@ -170,7 +231,7 @@ export default function HojePage() {
         </div>
       </div>
 
-      {/* 6. Today Study Queue (Tasks) */}
+      {/* 7. Today Study Queue (Tasks from P1 and P2) */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div>
@@ -178,7 +239,7 @@ export default function HojePage() {
               Fila Diária Priorizada (O Que Estudar Agora)
             </h3>
             <p className="text-xs text-zinc-400">
-              Ordenação orientada pelo algoritmo: peso da banca Cebraspe + gap de domínio + urgência de estágio.
+              Ordenação orientada pelo algoritmo com tópicos de P1 e P2: relevância Cebraspe + gap de domínio + urgência.
             </p>
           </div>
           <Link href="/plano" className="text-xs font-semibold text-zinc-400 hover:text-white">
@@ -200,7 +261,7 @@ export default function HojePage() {
         </div>
       </div>
 
-      {/* 7. Deterministic Insights Box */}
+      {/* 8. Deterministic Insights Box */}
       {insights.length > 0 && (
         <Card className="p-5 border-zinc-800 bg-zinc-950/80">
           <CardHeader className="pb-2">

@@ -10,17 +10,22 @@ import {
 import { Rating } from 'ts-fsrs';
 
 describe('Data Store & Business Workflows Integration', () => {
-  it('loads store with 94 Camara topics and 4 subjects by default', () => {
+  it('loads store with 76 Camara topics, 9 subjects and 3 exam blocks by default', () => {
     const store = loadStore();
-    expect(store.subjects).toHaveLength(4);
-    expect(store.topics).toHaveLength(94);
-    expect(store.materials).toHaveLength(94);
+    expect(store.examBlocks).toHaveLength(3);
+    expect(store.subjects).toHaveLength(9);
+    expect(store.topics).toHaveLength(76);
+    expect(store.materials).toHaveLength(76);
+    expect(store.syllabusItems).toHaveLength(81);
     expect(store.exam.name).toBe('Câmara dos Deputados 2027');
+    expect(store.exam.p1_items).toBe(90);
+    expect(store.exam.p2_items).toBe(90);
+    expect(store.exam.p3_max_points).toBe(60);
   });
 
   it('records a TEC question session and automatically recalculates domain and study score', () => {
     const store = loadStore();
-    const topicId = 'top-adm-1'; // Lei 14.133 visão geral
+    const topicId = 'top-p1-adm-10'; // Lei 14.133 fundamentos
 
     const updatedStore = recordQuestionSessionAction(
       {
@@ -54,7 +59,7 @@ describe('Data Store & Business Workflows Integration', () => {
 
   it('records an error log and allows converting to a flashcard', () => {
     const store = loadStore();
-    const topicId = 'top-adm-7'; // Dispensa de licitação
+    const topicId = 'top-p1-adm-10';
 
     const { store: storeWithError, errorId } = recordErrorLogAction(
       {

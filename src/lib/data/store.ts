@@ -2,23 +2,38 @@
 
 import {
   Exam,
+  ExamBlock,
   Subject,
   Topic,
+  SyllabusItem,
+  TopicSyllabusItem,
   StudyMaterial,
   QuestionSession,
   ErrorLog,
   Flashcard,
   FlashcardFsrsState,
   FlashcardReview,
+  DiscursiveSession,
   UserStudySettings,
   MockExam,
   MaterialProgress,
   StudyEvent,
+  Priority,
+  RecommendedMaterialType,
 } from '@/types/database';
 import { CardWithMetadata } from '@/lib/fsrs/types';
-import { SEED_EXAM, SEED_SUBJECTS, SEED_TOPICS, SEED_MATERIALS } from './seed-data';
+import {
+  SEED_EXAM,
+  SEED_EXAM_BLOCKS,
+  SEED_SUBJECTS,
+  SEED_TOPICS,
+  SEED_SYLLABUS_ITEMS,
+  SEED_TOPIC_SYLLABUS_ITEMS,
+  SEED_MATERIALS,
+} from './seed';
 import { calculateTopicDomain, evaluateTopicStatus } from '@/lib/study-engine/domain';
 import { calculateStudyScore } from '@/lib/study-engine/study-score';
+import { calculateDiscursiveScore } from '@/lib/study-engine/discursive';
 import {
   createInitialFsrsCard,
   processReview,
@@ -27,12 +42,17 @@ import {
 } from '@/lib/fsrs/scheduler';
 import { Rating } from 'ts-fsrs';
 
-const STORAGE_KEY = 'camara_estudos_store_v1';
+export const STORAGE_KEY_V1 = 'camara_estudos_store_v1';
+export const STORAGE_KEY_V2 = 'camara_estudos_store_v2';
+export const STORE_VERSION = 2;
 
 export interface AppStoreData {
   exam: Exam;
+  examBlocks: ExamBlock[];
   subjects: Subject[];
   topics: Topic[];
+  syllabusItems: SyllabusItem[];
+  topicSyllabusItems: TopicSyllabusItem[];
   materials: StudyMaterial[];
   materialProgress: Record<string, MaterialProgress>;
   questionSessions: QuestionSession[];
@@ -40,16 +60,41 @@ export interface AppStoreData {
   flashcards: Flashcard[];
   fsrsStates: Record<string, FlashcardFsrsState>;
   reviews: FlashcardReview[];
+  discursiveSessions: DiscursiveSession[];
   settings: UserStudySettings;
   mockExams: MockExam[];
   events: StudyEvent[];
 }
 
-function getDefaultStore(): AppStoreData {
+export interface StoredStoreEnvelope {
+  version: number;
+  data: AppStoreData;
+}
+
+export interface StudyRepository {
+  load(): Promise<AppStoreData> | AppStoreData;
+  save(data: AppStoreData): Promise<void> | void;
+}
+
+export class LocalStudyRepository implements StudyRepository {
+  load(): AppStoreData {
+    return loadStore();
+  }
+  save(data: AppStoreData): void {
+    saveStore(data);
+  }
+}
+
+export const studyRepository: StudyRepository = new LocalStudyRepository();
+
+export function getDefaultStore(): AppStoreData {
   return {
     exam: SEED_EXAM,
+    examBlocks: SEED_EXAM_BLOCKS,
     subjects: SEED_SUBJECTS,
     topics: SEED_TOPICS,
+    syllabusItems: SEED_SYLLABUS_ITEMS,
+    topicSyllabusItems: SEED_TOPIC_SYLLABUS_ITEMS,
     materials: SEED_MATERIALS,
     materialProgress: {},
     questionSessions: [],
@@ -57,6 +102,7 @@ function getDefaultStore(): AppStoreData {
     flashcards: [],
     fsrsStates: {},
     reviews: [],
+    discursiveSessions: [],
     settings: {
       user_id: 'local-user',
       default_high_questions: 30,
@@ -72,27 +118,276 @@ function getDefaultStore(): AppStoreData {
   };
 }
 
+/**
+ * Migration mappings from legacy topics (v1) to consolidated/aligned topics (v2).
+ */
+export const LEGACY_TOPIC_MAPPING: Record<string, string> = {
+  // Português
+  'top-port-1': 'top-p1-port-1',
+  'top-port-2': 'top-p1-port-2',
+  'top-port-3': 'top-p1-port-4',
+  'top-port-4': 'top-p1-port-3',
+  'top-port-5': 'top-p1-port-4',
+  'top-port-6': 'top-p1-port-5',
+  'top-port-7': 'top-p1-port-5',
+  'top-port-8': 'top-p1-port-6',
+  'top-port-9': 'top-p1-port-6',
+  'top-port-10': 'top-p1-port-6',
+  'top-port-11': 'top-p1-port-2',
+  'top-port-12': 'top-p1-port-2',
+  'top-port-13': 'top-p1-port-7',
+
+  // Constitucional
+  'top-const-1': 'top-p1-const-1',
+  'top-const-2': 'top-p1-const-2',
+  'top-const-3': 'top-p1-const-3',
+  'top-const-4': 'top-p1-const-4',
+  'top-const-5': 'top-p1-const-5',
+  'top-const-6': 'top-p1-const-6',
+  'top-const-7': 'top-p1-const-7',
+  'top-const-8': 'top-p1-const-8',
+  'top-const-9': 'top-p1-const-9',
+  'top-const-10': 'top-p1-const-10',
+  'top-const-11': 'top-p1-const-11',
+
+  // Administrativo
+  'top-adm-1': 'top-p1-adm-1',
+  'top-adm-2': 'top-p1-adm-2',
+  'top-adm-3': 'top-p1-adm-3',
+  'top-adm-4': 'top-p1-adm-4',
+  'top-adm-5': 'top-p1-adm-5',
+  'top-adm-6': 'top-p1-adm-6',
+  'top-adm-7': 'top-p1-adm-7',
+  'top-adm-8': 'top-p1-adm-8',
+  'top-adm-9': 'top-p1-adm-9',
+  'top-adm-10': 'top-p1-adm-10',
+  'top-adm-11': 'top-p1-adm-11',
+  'top-adm-12': 'top-p1-adm-12',
+  'top-adm-13': 'top-p1-adm-13',
+
+  // TI antigos consolidando em unidades práticas de estudo
+  'top-ti-1': 'top-p1-ti-1',
+  'top-ti-2': 'top-p1-ti-1',
+  'top-ti-3': 'top-p1-ti-1',
+  'top-ti-4': 'top-p1-ti-1',
+  'top-ti-5': 'top-p1-ti-2',
+  'top-ti-6': 'top-p1-ti-2',
+  'top-ti-7': 'top-p1-ti-2',
+  'top-ti-8': 'top-p1-ti-3',
+  'top-ti-9': 'top-p1-ti-3',
+  'top-ti-10': 'top-p1-ti-3',
+  // Segurança consolidada em top-p1-ti-4
+  'top-ti-11': 'top-p1-ti-4',
+  'top-ti-12': 'top-p1-ti-4',
+  'top-ti-13': 'top-p1-ti-4',
+  'top-ti-14': 'top-p1-ti-4',
+  'top-ti-15': 'top-p1-ti-4',
+  'top-ti-16': 'top-p1-ti-4',
+  'top-ti-17': 'top-p1-ti-4',
+  'top-ti-18': 'top-p1-ti-4',
+  'top-ti-19': 'top-p1-ti-4',
+  'top-ti-20': 'top-p1-ti-4',
+  // IA consolidada em top-p1-ti-5
+  'top-ti-21': 'top-p1-ti-5',
+  'top-ti-22': 'top-p1-ti-5',
+  'top-ti-23': 'top-p1-ti-5',
+  'top-ti-24': 'top-p1-ti-5',
+  'top-ti-25': 'top-p1-ti-5',
+  // Ética digital em top-p1-ti-6
+  'top-ti-26': 'top-p1-ti-6',
+  // Dados em top-p1-ti-7
+  'top-ti-27': 'top-p1-ti-7',
+  'top-ti-28': 'top-p1-ti-7',
+  'top-ti-29': 'top-p1-ti-7',
+  // Visualização e gráficos consolidados em top-p1-ti-8
+  'top-ti-30': 'top-p1-ti-8',
+  'top-ti-31': 'top-p1-ti-8',
+  'top-ti-32': 'top-p1-ti-8',
+  'top-ti-33': 'top-p1-ti-8',
+  'top-ti-34': 'top-p1-ti-8',
+  'top-ti-35': 'top-p1-ti-8',
+  'top-ti-36': 'top-p1-ti-8',
+
+  // Named legacy microtopics (especially IT visualization and security)
+  'top-ti-histograma': 'top-p1-ti-8',
+  'top-ti-boxplot': 'top-p1-ti-8',
+  'top-ti-box-plot': 'top-p1-ti-8',
+  'top-ti-barras': 'top-p1-ti-8',
+  'top-ti-linhas': 'top-p1-ti-8',
+  'top-ti-dispersao': 'top-p1-ti-8',
+  'top-ti-powerbi': 'top-p1-ti-8',
+  'top-ti-tableau': 'top-p1-ti-8',
+  'top-ti-storytelling': 'top-p1-ti-8',
+  'top-ti-phishing': 'top-p1-ti-4',
+  'top-ti-pharming': 'top-p1-ti-4',
+  'top-ti-malware': 'top-p1-ti-4',
+  'top-ti-ransomware': 'top-p1-ti-4',
+  'top-ti-virus': 'top-p1-ti-4',
+  'top-ti-firewall': 'top-p1-ti-4',
+  'top-ti-backup': 'top-p1-ti-4',
+};
+
+export function remapTopicId(oldId: string): string {
+  if (LEGACY_TOPIC_MAPPING[oldId]) return LEGACY_TOPIC_MAPPING[oldId];
+  const lower = oldId.toLowerCase();
+  if (
+    lower.includes('histogram') ||
+    lower.includes('box') ||
+    lower.includes('grafico') ||
+    lower.includes('power-bi') ||
+    lower.includes('tableau') ||
+    lower.includes('storytelling')
+  ) {
+    return 'top-p1-ti-8';
+  }
+  if (
+    lower.includes('phishing') ||
+    lower.includes('pharming') ||
+    lower.includes('firewall') ||
+    lower.includes('antivirus') ||
+    lower.includes('malware') ||
+    lower.includes('ransomware') ||
+    lower.includes('virus') ||
+    lower.includes('worm') ||
+    lower.includes('backup')
+  ) {
+    return 'top-p1-ti-4';
+  }
+  return oldId;
+}
+
+
+export function migrateV1ToV2(v1Data: Partial<AppStoreData>): AppStoreData {
+  const defaultStore = getDefaultStore();
+
+  const migratedSessions: QuestionSession[] = (v1Data.questionSessions || []).map((s) => ({
+    ...s,
+    topic_id: remapTopicId(s.topic_id),
+  }));
+
+  const migratedErrors: ErrorLog[] = (v1Data.errorLogs || []).map((e) => ({
+    ...e,
+    topic_id: remapTopicId(e.topic_id),
+  }));
+
+  const migratedFlashcards: Flashcard[] = (v1Data.flashcards || []).map((c) => ({
+    ...c,
+    topic_id: remapTopicId(c.topic_id),
+  }));
+
+  // Preserve user overrides on topics if present in v1
+  const v1TopicsMap = new Map((v1Data.topics || []).map((t) => [t.id, t]));
+  const updatedTopics = defaultStore.topics.map((t) => {
+    // Check if user had overridden or studied the topic previously
+    const mappedOldKey = Object.keys(LEGACY_TOPIC_MAPPING).find(
+      (k) => LEGACY_TOPIC_MAPPING[k] === t.id
+    );
+    const oldTopic = (mappedOldKey && v1TopicsMap.get(mappedOldKey)) || v1TopicsMap.get(t.id);
+
+    if (oldTopic) {
+      return {
+        ...t,
+        status: oldTopic.status !== 'NOT_STARTED' ? oldTopic.status : t.status,
+        priority: oldTopic.priority_source === 'USER_OVERRIDE' ? oldTopic.priority : t.priority,
+        priority_source: oldTopic.priority_source || t.priority_source,
+        last_studied_at: oldTopic.last_studied_at || t.last_studied_at,
+        domain_score: oldTopic.domain_score ?? t.domain_score,
+        domain_confidence: oldTopic.domain_confidence ?? t.domain_confidence,
+      };
+    }
+    return t;
+  });
+
+  return {
+    ...defaultStore,
+    exam: {
+      ...defaultStore.exam,
+      ...(v1Data.exam || {}),
+      // Preserve official parameters
+      p1_items: 90,
+      p2_items: 90,
+      p1_min_points: 18,
+      p2_min_points: 27,
+      objective_total_min_points: 54,
+      p3_max_points: 60,
+      p3_min_points: 30,
+      exam_date: v1Data.exam?.exam_date || defaultStore.exam.exam_date,
+    },
+    examBlocks: SEED_EXAM_BLOCKS,
+    subjects: SEED_SUBJECTS,
+    topics: updatedTopics,
+    syllabusItems: SEED_SYLLABUS_ITEMS,
+    topicSyllabusItems: SEED_TOPIC_SYLLABUS_ITEMS,
+    materials: SEED_MATERIALS,
+    materialProgress: v1Data.materialProgress || {},
+    questionSessions: migratedSessions,
+    errorLogs: migratedErrors,
+    flashcards: migratedFlashcards,
+    fsrsStates: v1Data.fsrsStates || {},
+    reviews: v1Data.reviews || [],
+    discursiveSessions: v1Data.discursiveSessions || [],
+    settings: {
+      ...defaultStore.settings,
+      ...(v1Data.settings || {}),
+    },
+    mockExams: v1Data.mockExams || [],
+    events: v1Data.events || [],
+  };
+}
+
 export function loadStore(): AppStoreData {
   if (typeof window === 'undefined') {
     return getDefaultStore();
   }
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      const initial = getDefaultStore();
-      saveStore(initial);
-      return initial;
+    // 1. Try v2 format first
+    const rawV2 = localStorage.getItem(STORAGE_KEY_V2);
+    if (rawV2) {
+      const parsedEnvelope = JSON.parse(rawV2);
+      let data: AppStoreData;
+      if (parsedEnvelope && parsedEnvelope.version === 2 && parsedEnvelope.data) {
+        data = parsedEnvelope.data as AppStoreData;
+      } else {
+        data = parsedEnvelope as AppStoreData;
+      }
+
+      // Ensure all seed components are loaded if missing
+      if (!data.examBlocks || data.examBlocks.length === 0) {
+        data.examBlocks = SEED_EXAM_BLOCKS;
+      }
+      if (!data.syllabusItems || data.syllabusItems.length === 0) {
+        data.syllabusItems = SEED_SYLLABUS_ITEMS;
+      }
+      if (!data.topicSyllabusItems || data.topicSyllabusItems.length === 0) {
+        data.topicSyllabusItems = SEED_TOPIC_SYLLABUS_ITEMS;
+      }
+      if (!data.discursiveSessions) {
+        data.discursiveSessions = [];
+      }
+      if (!data.topics || data.topics.length < SEED_TOPICS.length) {
+        // Merge missing topics
+        const existingIds = new Set(data.topics.map((t) => t.id));
+        const missingTopics = SEED_TOPICS.filter((t) => !existingIds.has(t.id));
+        data.topics = [...data.topics, ...missingTopics];
+      }
+      return data;
     }
-    const parsed = JSON.parse(raw) as AppStoreData;
-    // Merge if empty topics
-    if (!parsed.topics || parsed.topics.length === 0) {
-      parsed.topics = SEED_TOPICS;
+
+    // 2. Check if v1 exists and needs migration
+    const rawV1 = localStorage.getItem(STORAGE_KEY_V1);
+    if (rawV1) {
+      const parsedV1 = JSON.parse(rawV1) as Partial<AppStoreData>;
+      const migrated = migrateV1ToV2(parsedV1);
+      saveStore(migrated);
+      return migrated;
     }
-    if (!parsed.materials || parsed.materials.length === 0) {
-      parsed.materials = SEED_MATERIALS;
-    }
-    return parsed;
-  } catch {
+
+    // 3. Brand new setup: initialize default store in v2
+    const initial = getDefaultStore();
+    saveStore(initial);
+    return initial;
+  } catch (err) {
+    console.error('Error loading store, falling back to default store:', err);
     return getDefaultStore();
   }
 }
@@ -100,14 +395,18 @@ export function loadStore(): AppStoreData {
 export function saveStore(store: AppStoreData) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+    const envelope: StoredStoreEnvelope = {
+      version: STORE_VERSION,
+      data: store,
+    };
+    localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(envelope));
   } catch (err) {
     console.error('Failed to save store to localStorage:', err);
   }
 }
 
 // -------------------------------------------------------------
-// Core Business Services (Requirement 56, 57, 14, 15, 17, 18)
+// Core Business Services
 // -------------------------------------------------------------
 
 export function recalculateTopicDomainService(
@@ -116,6 +415,11 @@ export function recalculateTopicDomainService(
 ): AppStoreData {
   const topic = store.topics.find((t) => t.id === topicId);
   if (!topic) return store;
+
+  // Domain score only applies to objective blocks (P1 / P2)
+  if (topic.exam_block_code !== 'P1' && topic.exam_block_code !== 'P2') {
+    return store;
+  }
 
   const topicSessions = store.questionSessions.filter((s) => s.topic_id === topicId);
 
@@ -250,10 +554,10 @@ export function recordQuestionSessionAction(
       return {
         ...t,
         last_studied_at: newSession.performed_at,
-        // If it was awaiting questions or not started, advance to consolidating
-        status: t.status === 'AWAITING_QUESTIONS' || t.status === 'NOT_STARTED' || t.status === 'LEARNING'
-          ? 'CONSOLIDATING'
-          : t.status,
+        status:
+          t.status === 'AWAITING_QUESTIONS' || t.status === 'NOT_STARTED' || t.status === 'LEARNING'
+            ? 'CONSOLIDATING'
+            : t.status,
       };
     }
     return t;
@@ -484,6 +788,101 @@ export function updateMaterialProgressAction(
   nextStore = recalculateTopicDomainService(progressData.topic_id, nextStore);
   saveStore(nextStore);
   return nextStore;
+}
+
+// -------------------------------------------------------------
+// Discursive Session Actions (P3)
+// -------------------------------------------------------------
+
+export function recordDiscursiveSessionAction(
+  sessionData: Omit<DiscursiveSession, 'id' | 'calculated_score' | 'created_at' | 'updated_at'>,
+  store: AppStoreData
+): { store: AppStoreData; session: DiscursiveSession } {
+  const calc = calculateDiscursiveScore(
+    sessionData.type,
+    sessionData.content_score,
+    sessionData.language_errors,
+    sessionData.lines_written
+  );
+
+  const sessionId = `disc-${Date.now()}`;
+  const newSession: DiscursiveSession = {
+    ...sessionData,
+    id: sessionId,
+    calculated_score: calc.calculatedScore,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  const nextStore: AppStoreData = {
+    ...store,
+    discursiveSessions: [newSession, ...(store.discursiveSessions || [])],
+    events: [
+      {
+        id: `ev-${Date.now()}`,
+        user_id: sessionData.user_id,
+        event_type: 'DISCURSIVE_SESSION_RECORDED',
+        entity_type: 'discursive_session',
+        entity_id: sessionId,
+        payload: {
+          type: sessionData.type,
+          calculatedScore: calc.calculatedScore,
+          linesWritten: sessionData.lines_written,
+        },
+        created_at: new Date().toISOString(),
+      },
+      ...store.events,
+    ],
+  };
+
+  saveStore(nextStore);
+  return { store: nextStore, session: newSession };
+}
+
+export function deleteDiscursiveSessionAction(
+  sessionId: string,
+  store: AppStoreData
+): AppStoreData {
+  const nextStore: AppStoreData = {
+    ...store,
+    discursiveSessions: (store.discursiveSessions || []).filter((s) => s.id !== sessionId),
+  };
+  saveStore(nextStore);
+  return nextStore;
+}
+
+// -------------------------------------------------------------
+// User Override Action for Topic Priority
+// -------------------------------------------------------------
+
+export function updateTopicPriorityAction(
+  topicId: string,
+  priority: Priority,
+  recommendedMaterialType: RecommendedMaterialType | undefined,
+  store: AppStoreData
+): AppStoreData {
+  const weight = priority === 'HIGH' ? 3.0 : priority === 'MEDIUM' ? 2.0 : 1.0;
+  const nextStore: AppStoreData = {
+    ...store,
+    topics: store.topics.map((t) => {
+      if (t.id === topicId) {
+        return {
+          ...t,
+          priority,
+          priority_weight: weight,
+          priority_basis: 'USER_OVERRIDE',
+          priority_source: 'Alterado manualmente pelo usuário',
+          recommended_material_type: recommendedMaterialType || t.recommended_material_type,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return t;
+    }),
+  };
+
+  const recalculatedStore = recalculateTopicDomainService(topicId, nextStore);
+  saveStore(recalculatedStore);
+  return recalculatedStore;
 }
 
 export function getDueFlashcards(store: AppStoreData, now: Date = new Date()): CardWithMetadata[] {

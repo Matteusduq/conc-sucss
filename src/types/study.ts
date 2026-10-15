@@ -1,4 +1,4 @@
-import { Priority, DomainConfidence, RecommendedMaterialType } from './database';
+import { Priority, DomainConfidence, RecommendedMaterialType, CrossRelevance } from './database';
 
 export type DomainBand = 
   | 'FRACO'
@@ -48,6 +48,7 @@ export interface TodayTask {
   subjectId: string;
   subjectName: string;
   topicName: string;
+  examBlockCode?: 'P1' | 'P2';
   priority: Priority;
   recommendedMaterialType: RecommendedMaterialType;
   actionType: 'READ_MATERIAL' | 'TEC_QUESTIONS' | 'REVIEW_ERRORS' | 'MEMORY_REVIEW';
@@ -57,6 +58,8 @@ export interface TodayTask {
   studyScore: number;
   domainScore: number | null;
   domainConfidence: DomainConfidence | null;
+  crossRelevance?: CrossRelevance;
+  isDiscursiveRelevant?: boolean;
   targetQuestions?: number;
 }
 
@@ -89,4 +92,26 @@ export interface DashboardKPIs {
   atRiskTopicsCount: number;
   awaitingQuestionsCount: number;
   completedMaterialsCount: number;
+}
+
+export interface DiscursiveKPIs {
+  totalSessions: number;
+  question20Count: number;
+  technicalPieceCount: number;
+  averageScore: number;
+  totalLinesWritten: number;
+  averageLanguageErrors: number;
+}
+
+export interface BlockPerformanceSummary {
+  blockCode: 'P1' | 'P2';
+  totalQuestions: number;
+  correct: number;
+  wrong: number;
+  blank: number;
+  netPoints: number;
+  accuracyRate: number;
+  coveragePercent: number;
+  averageDomainScore: number;
+  studyTimeSeconds: number;
 }

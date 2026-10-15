@@ -12,6 +12,8 @@ import {
   CheckCircle,
   Brain,
   AlertTriangle,
+  PenTool,
+  BookOpen,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -25,19 +27,63 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import { computeDiscursiveKPIs } from '@/lib/study-engine/discursive';
+import { formatDurationMinutes } from '@/lib/utils/date';
 
 export default function AnalyticsPage() {
   const { store } = useModal();
 
-  const totalTopics = store.topics.length;
-  const startedTopics = store.topics.filter((t) => t.status !== 'NOT_STARTED').length;
-  const awaitingQuestions = store.topics.filter((t) => t.status === 'AWAITING_QUESTIONS').length;
-  const masteredTopics = store.topics.filter((t) => t.status === 'MASTERED' || t.status === 'MAINTENANCE').length;
+  const topicMap = new Map(store.topics.map((t) => [t.id, t]));
 
-  const coveragePercent = Math.round((startedTopics / Math.max(1, totalTopics)) * 100);
-  const masteredPercent = Math.round((masteredTopics / Math.max(1, totalTopics)) * 100);
+  // Block metrics helper
+  const computeBlockAnalytics = (blockCode: 'P1' | 'P2') => {
+    const blockTopics = store.topics.filter((t) => t.exam_block_code === blockCode);
+    const totalUnits = blockTopics.length;
+    const startedUnits = blockTopics.filter((t) => t.status !== 'NOT_STARTED').length;
+    const coveragePercent = Math.round((startedUnits / Math.max(1, totalUnits)) * 100);
 
-  // Risk Matrix Quadrants (Requirement 42)
+    const evaluatedTopics = blockTopics.filter((t) => t.domain_score !== null);
+    const avgDomain =
+      evaluatedTopics.length > 0
+        ? Math.round(evaluatedTopics.reduce((sum, t) => sum + (t.domain_score || 0), 0) / evaluatedTopics.length)
+        : null;
+
+    const blockSessions = store.questionSessions.filter((s) => {
+      const top = topicMap.get(s.topic_id);
+      return top && top.exam_block_code === blockCode;
+    });
+
+    const totalQuestions = blockSessions.reduce((acc, s) => acc + s.total_questions, 0);
+    const totalCorrect = blockSessions.reduce((acc, s) => acc + s.correct, 0);
+    const totalWrong = blockSessions.reduce((acc, s) => acc + s.wrong, 0);
+    const totalBlank = blockSessions.reduce((acc, s) => acc + s.blank, 0);
+    const netPoints = totalCorrect - totalWrong;
+    const answered = totalCorrect + totalWrong;
+    const accuracy = answered > 0 ? (totalCorrect / answered) * 100 : 0;
+
+    const studySeconds = blockSessions.reduce((acc, s) => acc + (s.duration_seconds || 0), 0);
+    const studyMinutes = Math.round(studySeconds / 60);
+
+    return {
+      totalUnits,
+      startedUnits,
+      coveragePercent,
+      avgDomain,
+      totalQuestions,
+      totalCorrect,
+      totalWrong,
+      totalBlank,
+      netPoints,
+      accuracy,
+      studyMinutes,
+    };
+  };
+
+  const p1 = computeBlockAnalytics('P1');
+  const p2 = computeBlockAnalytics('P2');
+  const p3KPIs = computeDiscursiveKPIs(store.discursiveSessions || []);
+
+  // Risk Matrix Quadrants (Objective topics)
   const critical = store.topics.filter(
     (t) => t.priority === 'HIGH' && ((t.domain_score ?? 0) < 60 || t.status === 'AT_RISK')
   );
@@ -55,22 +101,22 @@ export default function AnalyticsPage() {
   const statusData = [
     { name: 'Não Iniciado', value: store.topics.filter((t) => t.status === 'NOT_STARTED').length, color: '#3f3f46' },
     { name: 'Em Teoria', value: store.topics.filter((t) => t.status === 'LEARNING').length, color: '#3b82f6' },
-    { name: 'Aguardando TEC', value: awaitingQuestions, color: '#f59e0b' },
+    { name: 'Aguardando TEC', value: store.topics.filter((t) => t.status === 'AWAITING_QUESTIONS').length, color: '#f59e0b' },
     { name: 'Consolidando', value: store.topics.filter((t) => t.status === 'CONSOLIDATING').length, color: '#eab308' },
-    { name: 'Dominado / Manutenção', value: masteredTopics, color: '#10b981' },
+    { name: 'Dominado / Manutenção', value: store.topics.filter((t) => t.status === 'MASTERED' || t.status === 'MAINTENANCE').length, color: '#10b981' },
     { name: 'Em Risco', value: store.topics.filter((t) => t.status === 'AT_RISK').length, color: '#ef4444' },
   ].filter((d) => d.value > 0);
 
-  // Performance by Subject
-  const subjectMap = new Map(store.subjects.map((s) => [s.id, s.name]));
+  // Questions by Subject (all 9 subjects)
   const questionsBySubject = store.subjects.map((sub) => {
     const subSessions = store.questionSessions.filter((s) => s.subject_id === sub.id);
     const questions = subSessions.reduce((sum, s) => sum + s.total_questions, 0);
     const net = subSessions.reduce((sum, s) => sum + s.net_points, 0);
 
     return {
-      name: sub.name.split(' ')[0],
+      name: sub.name.length > 18 ? sub.name.slice(0, 16) + '...' : sub.name,
       fullName: sub.name,
+      block: sub.exam_block_code,
       questoes: questions,
       liquida: net,
     };
@@ -81,49 +127,133 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="pb-4 border-b border-zinc-800">
         <h1 className="text-xl md:text-2xl font-bold text-zinc-100 tracking-tight">
-          Analytics Determinístico & Matriz de Risco
+          Analytics Integral — P1, P2 e P3
         </h1>
         <p className="text-xs text-zinc-400 mt-1">
-          Auditoria transparente da preparação para o concurso da Câmara dos Deputados baseada exclusivamente em dados reais.
+          Visão separada para Conhecimentos Básicos (P1), Conhecimentos Específicos (P2) e Treino Discursivo (P3).
         </p>
       </div>
 
-      {/* 1. Cobertura do Edital */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="p-4">
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-zinc-400">
-            Edital Iniciado
-          </span>
-          <div className="text-2xl font-black font-mono text-zinc-100 mt-1">
-            {coveragePercent}%
+      {/* 1. Três Painéis Centrais: P1, P2 e P3 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* P1 Card */}
+        <Card className="p-5 bg-zinc-900/50 border-zinc-800 space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <div>
+              <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                P1 — Conhecimentos Básicos
+              </span>
+              <div className="text-xs text-zinc-400 mt-1">90 itens • mínimo 18 pts</div>
+            </div>
+            <BookOpen className="w-5 h-5 text-blue-400" />
           </div>
-          <p className="text-[10px] text-zinc-400 mt-1">
-            {startedTopics} de {totalTopics} tópicos iniciados
-          </p>
+
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Cobertura</span>
+              <span className="text-xl font-bold font-mono text-zinc-100">{p1.coveragePercent}%</span>
+              <span className="text-[10px] text-zinc-500 block">{p1.startedUnits}/{p1.totalUnits} unidades</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Domínio Médio</span>
+              <span className="text-xl font-bold font-mono text-emerald-400">
+                {p1.avgDomain !== null ? `${p1.avgDomain}%` : '—'}
+              </span>
+              <span className="text-[10px] text-zinc-500 block">Objetivo Cebraspe</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Questões Feitas</span>
+              <span className="text-base font-bold font-mono text-zinc-200">{p1.totalQuestions}</span>
+              <span className="text-[10px] text-zinc-500 block">{p1.totalCorrect}C • {p1.totalWrong}E</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Nota Líquida</span>
+              <span className="text-base font-bold font-mono text-emerald-400">
+                {p1.totalQuestions > 0 ? (p1.netPoints > 0 ? `+${p1.netPoints}` : p1.netPoints) : '0'} pts
+              </span>
+              <span className="text-[10px] text-zinc-500 block">Tempo: {formatDurationMinutes(p1.studyMinutes)}</span>
+            </div>
+          </div>
         </Card>
 
-        <Card className="p-4">
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-zinc-400">
-            Aguardando Questões TEC
-          </span>
-          <div className="text-2xl font-black font-mono text-amber-400 mt-1">
-            {awaitingQuestions}
+        {/* P2 Card */}
+        <Card className="p-5 bg-zinc-900/50 border-zinc-800 space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <div>
+              <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                P2 — Conhecimentos Específicos
+              </span>
+              <div className="text-xs text-zinc-400 mt-1">90 itens • mínimo 27 pts</div>
+            </div>
+            <BookOpen className="w-5 h-5 text-purple-400" />
           </div>
-          <p className="text-[10px] text-zinc-400 mt-1">
-            Teoria lida sem validação prática
-          </p>
+
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Cobertura</span>
+              <span className="text-xl font-bold font-mono text-zinc-100">{p2.coveragePercent}%</span>
+              <span className="text-[10px] text-zinc-500 block">{p2.startedUnits}/{p2.totalUnits} unidades</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Domínio Médio</span>
+              <span className="text-xl font-bold font-mono text-emerald-400">
+                {p2.avgDomain !== null ? `${p2.avgDomain}%` : '—'}
+              </span>
+              <span className="text-[10px] text-zinc-500 block">Objetivo Cebraspe</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Questões Feitas</span>
+              <span className="text-base font-bold font-mono text-zinc-200">{p2.totalQuestions}</span>
+              <span className="text-[10px] text-zinc-500 block">{p2.totalCorrect}C • {p2.totalWrong}E</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Nota Líquida</span>
+              <span className="text-base font-bold font-mono text-emerald-400">
+                {p2.totalQuestions > 0 ? (p2.netPoints > 0 ? `+${p2.netPoints}` : p2.netPoints) : '0'} pts
+              </span>
+              <span className="text-[10px] text-zinc-500 block">Tempo: {formatDurationMinutes(p2.studyMinutes)}</span>
+            </div>
+          </div>
         </Card>
 
-        <Card className="p-4">
-          <span className="text-[11px] uppercase tracking-wider font-semibold text-zinc-400">
-            Tópicos Consolidados / Dominados
-          </span>
-          <div className="text-2xl font-black font-mono text-emerald-400 mt-1">
-            {masteredPercent}%
+        {/* P3 Card (Discursive - does not mix with domain_score) */}
+        <Card className="p-5 bg-zinc-900/50 border-zinc-800 space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <div>
+              <span className="text-[10px] font-bold font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                P3 — Treino Discursivo
+              </span>
+              <div className="text-xs text-zinc-400 mt-1">60 pts • mínimo 30 pts</div>
+            </div>
+            <PenTool className="w-5 h-5 text-amber-400" />
           </div>
-          <p className="text-[10px] text-zinc-400 mt-1">
-            {masteredTopics} tópicos com domínio &gt;= 85%
-          </p>
+
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Treinos Feitos</span>
+              <span className="text-xl font-bold font-mono text-zinc-100">{p3KPIs.totalSessions}</span>
+              <span className="text-[10px] text-zinc-500 block">{p3KPIs.question20Count} Q20 • {p3KPIs.technicalPieceCount} Peças</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Média Calculada</span>
+              <span className="text-xl font-bold font-mono text-amber-400">
+                {p3KPIs.totalSessions > 0 ? `${p3KPIs.averageScore} pts` : '—'}
+              </span>
+              <span className="text-[10px] text-zinc-500 block">Fórmula Cebraspe</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Linhas Escritas</span>
+              <span className="text-base font-bold font-mono text-zinc-200">{p3KPIs.totalLinesWritten}</span>
+              <span className="text-[10px] text-zinc-500 block">Prática acumulada</span>
+            </div>
+            <div>
+              <span className="text-zinc-500 text-[10px] uppercase font-bold block">Erros de Escrita</span>
+              <span className="text-base font-bold font-mono text-zinc-200">
+                {p3KPIs.averageLanguageErrors}
+              </span>
+              <span className="text-[10px] text-zinc-500 block">Média por treino</span>
+            </div>
+          </div>
         </Card>
       </div>
 
@@ -148,13 +278,13 @@ export default function AnalyticsPage() {
               </span>
             </div>
             <p className="text-[11px] text-zinc-400">
-              Assuntos mais cobrados pela banca onde o desempenho está abaixo da meta. Fila de estudo dá prioridade máxima a estes tópicos.
+              Assuntos prioritários para o Cebraspe onde o rendimento está abaixo de 60%. Fila de estudo dá precedência imediata.
             </p>
             {critical.length > 0 && (
               <ul className="text-xs text-zinc-300 space-y-1 pt-1">
                 {critical.slice(0, 3).map((t) => (
                   <li key={t.id} className="truncate">
-                    • {t.name}
+                    • [{t.exam_block_code}] {t.name}
                   </li>
                 ))}
               </ul>
@@ -172,7 +302,7 @@ export default function AnalyticsPage() {
               </span>
             </div>
             <p className="text-[11px] text-zinc-400">
-              Conteúdos prioritários já consolidados. Devem receber apenas sessões espaçadas de manutenção preventiva no TEC.
+              Conteúdos prioritários já dominados. Recebem apenas manutenção preventiva no TEC para evitar perda de retenção.
             </p>
           </div>
 
@@ -202,7 +332,7 @@ export default function AnalyticsPage() {
               </span>
             </div>
             <p className="text-[11px] text-zinc-400">
-              Conteúdos dominados com baixo peso no edital. Manter em repouso.
+              Conteúdos dominados com menor densidade de cobrança no edital.
             </p>
           </div>
         </div>
@@ -213,7 +343,7 @@ export default function AnalyticsPage() {
         {/* Status Distribution */}
         <Card className="p-5 space-y-3">
           <CardHeader className="p-0">
-            <CardTitle className="text-sm">Distribuição de Status dos Tópicos</CardTitle>
+            <CardTitle className="text-sm">Distribuição de Status das Unidades de Estudo</CardTitle>
           </CardHeader>
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -243,16 +373,16 @@ export default function AnalyticsPage() {
         {/* Questões por Disciplina */}
         <Card className="p-5 space-y-3">
           <CardHeader className="p-0">
-            <CardTitle className="text-sm">Volume de Questões no TEC por Disciplina</CardTitle>
+            <CardTitle className="text-sm">Volume de Questões no TEC por Disciplina (9 Disciplinas)</CardTitle>
           </CardHeader>
           <div className="h-56 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={questionsBySubject}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                <XAxis dataKey="name" stroke="#71717a" fontSize={11} />
+                <XAxis dataKey="name" stroke="#71717a" fontSize={10} interval={0} angle={-15} textAnchor="end" height={45} />
                 <YAxis stroke="#71717a" fontSize={11} />
                 <Tooltip
-                  contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px' }}
+                  contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '8px', fontSize: '11px' }}
                 />
                 <Bar dataKey="questoes" fill="#10b981" radius={[4, 4, 0, 0]} name="Questões" />
               </BarChart>
