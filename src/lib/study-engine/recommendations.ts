@@ -1,7 +1,6 @@
-// Recommendations and Daily Planner Engine
-
-import { Topic, Subject, StudyMaterial, ErrorLog } from '@/types/database';
+import { Topic, Subject, StudyMaterial, ErrorLog, Priority } from '@/types/database';
 import { TodayTask, TodayPlanSummary } from '@/types/study';
+import { compareTopicsForQueue, getTopicStrategicFactors } from './study-score';
 
 export interface PlannerContext {
   topics: Topic[];
@@ -11,6 +10,55 @@ export interface PlannerContext {
   overdueCardsCount: number;
   availableMinutesToday?: number;
   weeklyTargetMinutes?: number;
+}
+
+/**
+ * Orders topics for the daily study plan using strategic exam weighting,
+ * risk priorities, and interleaved block balance (P2 and P1).
+ *
+ * Rules:
+ * 1. Urgent topics (AT_RISK, AWAITING_QUESTIONS) are placed first, ordered by compareTopicsForQueue.
+ * 2. Regular topics respect priority tiers (HIGH > MEDIUM > LOW).
+ * 3. Within each priority tier, P2 and P1 are interleaved so that P2 gets the top recommendation
+ *    (due to its strategic score boost) while P1 is never excluded or starved from daily study.
+ * 4. Deterministic tie-breaking via compareTopicsForQueue ensures no reliance on raw seed array order.
+ */
+export function orderTopicsForDailyPlan(topics: Topic[]): Topic[] {
+  // 1. Critical urgency / risk topics take absolute precedence
+  const urgent = topics
+    .filter((t) => t.status === 'AT_RISK' || t.status === 'AWAITING_QUESTIONS')
+    .sort(compareTopicsForQueue);
+
+  // 2. Non-urgent topics grouped by priority tier (HIGH > MEDIUM > LOW)
+  const nonUrgent = topics.filter(
+    (t) => t.status !== 'AT_RISK' && t.status !== 'AWAITING_QUESTIONS'
+  );
+
+  const tiers: Priority[] = ['HIGH', 'MEDIUM', 'LOW'];
+  const orderedNonUrgent: Topic[] = [];
+
+  for (const prio of tiers) {
+    const tierTopics = nonUrgent.filter((t) => t.priority === prio);
+    const p2Tier = tierTopics
+      .filter((t) => t.exam_block_code === 'P2')
+      .sort(compareTopicsForQueue);
+    const p1Tier = tierTopics
+      .filter((t) => t.exam_block_code === 'P1')
+      .sort(compareTopicsForQueue);
+    const otherTier = tierTopics
+      .filter((t) => t.exam_block_code !== 'P1' && t.exam_block_code !== 'P2')
+      .sort(compareTopicsForQueue);
+
+    // Interleave P2 and P1 within this tier. P2 leads because of its strategic advantage.
+    const maxLen = Math.max(p2Tier.length, p1Tier.length);
+    for (let i = 0; i < maxLen; i++) {
+      if (i < p2Tier.length) orderedNonUrgent.push(p2Tier[i]);
+      if (i < p1Tier.length) orderedNonUrgent.push(p1Tier[i]);
+    }
+    orderedNonUrgent.push(...otherTier);
+  }
+
+  return [...urgent, ...orderedNonUrgent];
 }
 
 export function generateDailyPlan(context: PlannerContext): TodayPlanSummary {
@@ -48,8 +96,8 @@ export function generateDailyPlan(context: PlannerContext): TodayPlanSummary {
   const subjectMap = new Map(subjects.map((s) => [s.id, s.name]));
   const materialByTopic = new Map(materials.map((m) => [m.topic_id, m]));
 
-  // Rank topics by study_score descending (considers both P1 and P2 topics)
-  const sortedTopics = [...topics].sort((a, b) => b.study_score - a.study_score);
+  // Rank topics strategically with deterministic tie-breaking and block balancing
+  const sortedTopics = orderTopicsForDailyPlan(topics);
 
   const tasks: TodayTask[] = [];
   const alerts: string[] = [];
@@ -144,6 +192,8 @@ export function generateDailyPlan(context: PlannerContext): TodayPlanSummary {
       crossRelevance: topic.cross_relevance,
       isDiscursiveRelevant: topic.is_discursive_relevant,
       targetQuestions: topic.priority === 'HIGH' ? 30 : topic.priority === 'MEDIUM' ? 20 : 15,
+      strategicReasons: getTopicStrategicFactors(topic),
+      discursiveSynergy: topic.discursive_synergy,
     });
 
     allocatedMinutes += estimated;

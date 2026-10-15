@@ -60,6 +60,8 @@ export interface TodayTask {
   domainConfidence: DomainConfidence | null;
   crossRelevance?: CrossRelevance;
   isDiscursiveRelevant?: boolean;
+  discursiveSynergy?: 'LOW' | 'MEDIUM' | 'HIGH' | null;
+  strategicReasons?: string[];
   targetQuestions?: number;
 }
 

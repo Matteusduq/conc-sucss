@@ -9,10 +9,14 @@ import { generateDailyPlan, generateDeterministicInsights } from '@/lib/study-en
 import { getDueFlashcards } from '@/lib/data/store';
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { AlertTriangle, Brain, Sparkles, BookOpen, PenTool, CheckCircle, Info } from 'lucide-react';
+import { AlertTriangle, Brain, Sparkles, BookOpen, PenTool, CheckCircle, Info, Compass, Target, ArrowRight, Layers } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { PriorityBadge } from '@/components/study/PriorityBadge';
+import { StudyScoreBadge } from '@/components/study/StudyScoreBadge';
 
 export default function HojePage() {
+  const router = useRouter();
   const { store, openTecModal } = useModal();
 
   const dueCards = getDueFlashcards(store);
@@ -138,6 +142,226 @@ export default function HojePage() {
         atRiskTopicsCount={atRiskTopics.length}
       />
 
+      {/* 4. Seu Ponto de Partida (Brand New / Unstarted Preparations) */}
+      {isPreparationUnstarted && plan.tasks.length >= 2 && (
+        <section className="p-6 rounded-2xl border-2 border-indigo-500/40 bg-gradient-to-b from-indigo-950/30 via-zinc-900/60 to-zinc-950/90 shadow-xl space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-indigo-500/20">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Compass className="w-5 h-5 text-indigo-400" />
+                <h2 className="text-lg font-bold text-white tracking-tight">
+                  Seu ponto de partida
+                </h2>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase tracking-wider">
+                  Motor Estratégico
+                </span>
+              </div>
+              <p className="text-xs text-zinc-300 leading-relaxed max-w-3xl">
+                Como você ainda não possui histórico de estudo, o plano foi calculado a partir dos critérios objetivos do{' '}
+                <span className="text-white font-semibold">Edital nº 1/2026</span>: estrutura do concurso, peso pedagógico dos conteúdos, mínimos de aprovação (mín. 27 em P2 vs 18 em P1), sinergia com a prova discursiva (P3) e tempo até a prova.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link href="/plano">
+                <Button size="sm" variant="outline" className="border-zinc-700 hover:bg-zinc-800 text-xs text-zinc-300">
+                  <Layers className="w-3.5 h-3.5 mr-1" />
+                  Ver Edital Completo
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {/* Cards: Missão Principal & Próximo Passo */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Missão Principal */}
+            {(() => {
+              const task1 = plan.tasks[0];
+              return (
+                <div className="flex flex-col justify-between p-5 rounded-xl border-2 border-amber-500/40 bg-zinc-900/90 hover:border-amber-500/60 transition-all shadow-md">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-2.5 py-1 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 uppercase tracking-wider">
+                        <Target className="w-3.5 h-3.5 text-amber-400" />
+                        Missão Principal
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <PriorityBadge priority={task1.priority} />
+                        <StudyScoreBadge score={task1.studyScore} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {task1.examBlockCode && (
+                          <span
+                            className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                              task1.examBlockCode === 'P1'
+                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                            }`}
+                          >
+                            {task1.examBlockCode}
+                          </span>
+                        )}
+                        <span className="text-[11px] font-semibold text-zinc-400 tracking-wider uppercase">
+                          {task1.subjectName}
+                        </span>
+                      </div>
+                      <h3 className="text-base font-bold text-zinc-100 tracking-tight mt-1 leading-snug">
+                        {task1.topicName}
+                      </h3>
+                    </div>
+
+                    {/* Por que começar aqui? */}
+                    <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800 text-xs space-y-2">
+                      <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Por que começar aqui?
+                      </span>
+                      <ul className="text-[11px] text-zinc-300 space-y-1 list-disc list-inside">
+                        {(task1.strategicReasons || []).slice(0, 4).map((factor, i) => (
+                          <li key={i}>{factor}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between gap-2">
+                    <span className="text-xs text-zinc-400 font-mono">
+                      ~{task1.estimatedMinutes} min sugeridos
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openTecModal(task1.topicId)}
+                        className="cursor-pointer text-xs"
+                      >
+                        Praticar no TEC
+                      </Button>
+                      <Link href={`/estudar/${task1.topicId}`}>
+                        <Button size="sm" variant="primary" className="cursor-pointer text-xs">
+                          <BookOpen className="w-3.5 h-3.5 mr-1" />
+                          Estudar Teoria
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Próximo Passo */}
+            {(() => {
+              const task2 = plan.tasks[1];
+              return (
+                <div className="flex flex-col justify-between p-5 rounded-xl border border-zinc-700/80 bg-zinc-900/70 hover:border-zinc-600 transition-all shadow-md">
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="px-2.5 py-1 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1.5 uppercase tracking-wider">
+                        <ArrowRight className="w-3.5 h-3.5 text-blue-400" />
+                        Próximo Passo
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <PriorityBadge priority={task2.priority} />
+                        <StudyScoreBadge score={task2.studyScore} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {task2.examBlockCode && (
+                          <span
+                            className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded ${
+                              task2.examBlockCode === 'P1'
+                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+                            }`}
+                          >
+                            {task2.examBlockCode}
+                          </span>
+                        )}
+                        <span className="text-[11px] font-semibold text-zinc-400 tracking-wider uppercase">
+                          {task2.subjectName}
+                        </span>
+                      </div>
+                      <h3 className="text-base font-bold text-zinc-100 tracking-tight mt-1 leading-snug">
+                        {task2.topicName}
+                      </h3>
+                    </div>
+
+                    {/* Por que estudar logo após? */}
+                    <div className="p-3.5 rounded-lg bg-zinc-950/80 border border-zinc-800 text-xs space-y-2">
+                      <span className="font-bold text-blue-300 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Por que estudar logo após?
+                      </span>
+                      <ul className="text-[11px] text-zinc-300 space-y-1 list-disc list-inside">
+                        {(task2.strategicReasons || []).slice(0, 4).map((factor, i) => (
+                          <li key={i}>{factor}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between gap-2">
+                    <span className="text-xs text-zinc-400 font-mono">
+                      ~{task2.estimatedMinutes} min sugeridos
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openTecModal(task2.topicId)}
+                        className="cursor-pointer text-xs"
+                      >
+                        Praticar no TEC
+                      </Button>
+                      <Link href={`/estudar/${task2.topicId}`}>
+                        <Button size="sm" variant="primary" className="cursor-pointer text-xs">
+                          <BookOpen className="w-3.5 h-3.5 mr-1" />
+                          Estudar Teoria
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Non-blocking Freedom Banner */}
+          <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs text-zinc-300">
+            <div className="flex items-start gap-2.5">
+              <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-semibold text-zinc-200">Recomendação flexível (você tem autonomia):</span>
+                <p className="text-zinc-400 text-[11px] mt-0.5">
+                  O plano não bloqueia sua rotina. Você pode explorar a biblioteca, filtrar qualquer assunto no TEC, revisar cartões de memória ou registrar treinos discursivos livremente.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <Link href="/estudar">
+                <Button size="sm" variant="outline" className="text-xs">
+                  <BookOpen className="w-3 h-3 mr-1" /> Biblioteca
+                </Button>
+              </Link>
+              <Link href="/memoria">
+                <Button size="sm" variant="outline" className="text-xs">
+                  <Brain className="w-3 h-3 mr-1" /> Memória
+                </Button>
+              </Link>
+              <Link href="/discursiva">
+                <Button size="sm" variant="outline" className="text-xs">
+                  <PenTool className="w-3 h-3 mr-1" /> Discursiva
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* 4. Alerts Section (if any alerts) */}
       {plan.alerts.length > 0 && (
         <div className="space-y-2">
@@ -254,7 +478,7 @@ export default function HojePage() {
               task={task}
               onOpenTecModal={(topicId) => openTecModal(topicId)}
               onOpenMaterial={(topicId) => {
-                window.location.href = `/estudar/${topicId}`;
+                router.push(`/estudar/${topicId}`);
               }}
             />
           ))}

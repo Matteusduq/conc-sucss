@@ -116,17 +116,73 @@ Exibida sempre ao lado do domínio:
 ---
 
 ## 6. Algoritmo "O Que Estudar Agora?" (Study Score 0–100)
-Calculado para cada tópico para montar a fila de estudo:
+
+Calculado para cada tópico para montar a fila prioritária de estudo e responder deterministamente à pergunta central: *"O que eu devo estudar agora e por quê?"*.
+
+### 6.1. Fórmula Base
 $$\text{study\_score} = \text{priority} \times 0.35 + \text{mastery\_gap} \times 0.30 + \text{review\_urgency} \times 0.20 + \text{stage\_urgency} \times 0.10 + \text{confidence\_gap} \times 0.05$$
 
-### Boosters Aplicados:
-- $+10$ se HIGH e $\text{domain\_score} < 60$;
-- $+10$ se duas sessões recentes $< 60$;
-- $+8$ se HIGH e `NOT_STARTED`;
-- $+8$ se revisão de flashcards muito atrasada ($> 5$ devidos);
-- $+5$ se `AWAITING_QUESTIONS` há mais de 2 dias.
+Onde:
+- **priority:** `HIGH` = 100, `MEDIUM` = 60, `LOW` = 25;
+- **mastery\_gap:** $100 - \text{domain\_score}$ (se não iniciado: $100$ para HIGH, $75$ para MEDIUM, $50$ para LOW);
+- **review\_urgency:** urgência derivada do backlog de repetições FSRS;
+- **stage\_urgency:** urgência do ciclo de aprendizado (`NOT_STARTED` = 100 para HIGH, 75 para MEDIUM, 40 para LOW; `AWAITING_QUESTIONS` = 90; `CONSOLIDATING` = 60; `MAINTENANCE` = 30; `MASTERED` = 15);
+- **confidence\_gap:** deficiência de amostragem estatística ($100 - \text{confidence}$).
+
+### 6.2. Boosters Aplicados
+
+#### Boosters de Desempenho e Ciclo de Vida:
+1. $+15$ se status `AT_RISK` (tópico em perigo crítico de reprovação);
+2. $+10$ se duas sessões recentes $< 60\%$ de assertividade;
+3. $+8$ se prioridade `HIGH` e `NOT_STARTED` (aceleração inicial do edital);
+4. $+8$ se revisão de flashcards muito atrasada ($> 5$ devidos);
+5. $+5$ se `AWAITING_QUESTIONS` há mais de 2 dias.
+
+#### Boosters Estratégicos Normativos do Concurso:
+6. $+3$ se Conhecimento Específico (**P2**):
+   - *Motivo normativo:* 90 itens com mínimo eliminatório mais rigoroso (mín. 27 pontos vs mín. 18 pontos em P1) e critério normativo primário de desempate acadêmico no Edital nº 1/2026.
+7. Sinergia com a Prova Discursiva (**P3**):
+   - $+3$ se `discursive_synergy === 'HIGH'` (ex: Regimento Interno, Processo Legislativo e Prática de Redação Parlamentar);
+   - $+2$ se `discursive_synergy === 'MEDIUM'` (ex: Direito Constitucional Aplicado ao Congresso);
+   - $+1$ se `discursive_eligible` e bloco P2 (disciplina elegível para questões discursivas de conhecimentos específicos).
 
 Clamp final: $0 \le \text{study\_score} \le 100$.
+
+### 6.3. Cálculo do StudyScore no Primeiro Acesso (Zero Histórico)
+Ao inicializar uma preparação nova (brand-new store), todos os 76 tópicos recebem imediatamente seu StudyScore derivado pelo motor central através de `computeInitialStudyScores(SEED_TOPICS)`.
+Nenhum tópico permanece com `study_score = 0`.
+Os tópicos de alta prioridade recebem scores calibrados:
+- **P2 HIGH com alta sinergia discursiva:** Score 100 (ex: Regimento Interno, Processo Legislativo, Redação Legislativa);
+- **P2 HIGH com média sinergia discursiva:** Score 99 (ex: Direito Constitucional Aplicado);
+- **P2 HIGH sem sinergia especial:** Score 98;
+- **P1 HIGH:** Score 94 (ex: Língua Portuguesa - Tipologia/Textualização, Transformação Digital);
+- **P2 MEDIUM:** Score 65;
+- **P1 MEDIUM:** Score 61;
+- **P2 LOW:** Score 52;
+- **P1 LOW:** Score 48.
+
+Essa calibração garante estritamente que $\text{HIGH} > \text{MEDIUM} > \text{LOW}$ em qualquer bloco.
+
+### 6.4. Regra de Desempate Determinístico (8 Níveis)
+Se dois tópicos possuírem o mesmo `study_score`, a ordenação **não depende da ordem do array de seed**. O desempate é estritamente determinístico através da função `compareTopicsForQueue(a, b)`, avaliando nesta ordem:
+1. **Situação de Risco:** `AT_RISK` ($6$) > `AWAITING_QUESTIONS` ($5$) > `NOT_STARTED` ($4$) > `LEARNING` ($3$) > `CONSOLIDATING` ($2$) > `MAINTENANCE` ($1$) > `MASTERED` ($0$);
+2. **Prioridade Pedagógica:** `HIGH` ($3$) > `MEDIUM` ($2$) > `LOW` ($1$);
+3. **Sinergia com P3:** `HIGH` ($4$) > `MEDIUM` ($3$) > `LOW` ($2$) > Elegível ($1$) > Nenhuma ($0$);
+4. **Relevância Estratégica do Bloco:** `P2` ($2$) > `P1` ($1$);
+5. **Menor Domínio / Menor Confiança:** maior deficiência do aluno é priorizada (menor `domain_score`, seguido de menor `domain_confidence`);
+6. **Menor Cobertura:** tópicos `NOT_STARTED` antecedem tópicos parcialmente estudados;
+7. **Tempo sem Estudo:** data de último estudo mais remota (ou nunca estudado) precede estudos recentes;
+8. **Identificador Técnico:** `display_order` seguido de `id.localeCompare` como desempate final técnico e estável.
+
+### 6.5. Equilíbrio entre P1 e P2 (Interleaving da Fila Diária)
+- **Vantagem moderada de P2:** P2 lidera a fila diária conquistando a **Missão Principal** (posição #1) devido à maior pontuação líquida exigida (27 pts) e sinergia com a peça técnica da prova P3.
+- **Não exclusão de P1:** A função `orderTopicsForDailyPlan` intercala tópicos P2 e P1 dentro de cada faixa de prioridade. Dessa forma, a posição #2 (**Próximo Passo**) é assegurada ao tópico mais prioritário de P1 (ex: Língua Portuguesa), impedindo que o aluno passe dias estudando apenas matérias específicas e negligencie o corte mínimo de 18 pontos em P1.
+- **Prioridade Dinâmica de Risco:** Um tópico de P1 que entre em situação `AT_RISK` (queda brusca de rendimento ou domínio crítico) ganha $+15$ pontos e fura a fila, assumindo a posição #1 antes de novos conteúdos teóricos de P2.
+
+### 6.6. Diferença entre Prioridade do Edital e Desempenho Individual
+- **Prioridade Estrutural do Edital:** Fator intrínseco estático baseado no peso normativo do conteúdo, número de questões esperadas, requisitos do cargo e relevância para as provas discursivas (P3);
+- **Desempenho Individual do Aluno:** Fator dinâmico derivado de métricas reais (assertividade no TEC, pontos líquidos Cebraspe C/E, tempo de resposta, estabilidade no algoritmo FSRS e quantidade de erros cognitivos reincidentes).
+O `study_score` funde ambos os fatores: o edital define o ponto de partida e os pesos máximos; o histórico do aluno calibra em tempo real as urgências de recuperação e manutenção.
 
 ---
 

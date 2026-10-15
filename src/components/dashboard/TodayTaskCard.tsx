@@ -75,9 +75,21 @@ export function TodayTaskCard({ task, onOpenTecModal, onOpenMaterial }: TodayTas
         {/* Reason Box */}
         <div className="p-3 rounded-lg bg-zinc-950/60 border border-zinc-800/80 text-xs text-zinc-300 leading-relaxed flex items-start gap-2.5">
           <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
+          <div className="space-y-1.5 w-full">
             <span className="font-semibold text-zinc-200">Por que estudar agora:</span>
             <p className="text-zinc-400">{task.reason}</p>
+            {task.strategicReasons && task.strategicReasons.length > 0 && (
+              <div className="pt-1.5 border-t border-zinc-800/60">
+                <span className="text-[10px] font-semibold text-zinc-300 uppercase tracking-wider block mb-1">
+                  Fatores Estratégicos do Motor:
+                </span>
+                <ul className="text-[11px] text-zinc-400 space-y-0.5 list-disc list-inside">
+                  {task.strategicReasons.map((factor, i) => (
+                    <li key={i}>{factor}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
 

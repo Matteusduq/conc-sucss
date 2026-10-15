@@ -19,7 +19,9 @@ export { SEED_EXAM_BLOCKS } from './exam-blocks';
 export { SEED_SUBJECTS } from './subjects';
 export { SEED_SYLLABUS_ITEMS, SEED_TOPIC_SYLLABUS_ITEMS } from './syllabus-items';
 
-export const SEED_TOPICS: Topic[] = [
+import { computeInitialStudyScores } from '@/lib/study-engine/study-score';
+
+export const SEED_TOPICS: Topic[] = computeInitialStudyScores([
   // P1 — Conhecimentos Básicos (42 tópicos)
   ...P1_PORTUGUES_TOPICS,
   ...P1_INGLES_TOPICS,
@@ -32,7 +34,7 @@ export const SEED_TOPICS: Topic[] = [
   ...P2_TRANSCRICAO_IA_TOPICS,
   ...P2_PROCESSO_LEGISLATIVO_TOPICS,
   ...P2_CIENCIA_POLITICA_TOPICS,
-];
+]);
 
 export const SEED_MATERIALS = generateSeedMaterials(SEED_TOPICS);
 

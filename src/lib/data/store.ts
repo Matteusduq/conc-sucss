@@ -370,6 +370,9 @@ export function loadStore(): AppStoreData {
         const missingTopics = SEED_TOPICS.filter((t) => !existingIds.has(t.id));
         data.topics = [...data.topics, ...missingTopics];
       }
+      if (!data.topics || data.topics.some((t) => !t.study_score || t.study_score === 0)) {
+        data = recalculateAllStudyScoresService(data);
+      }
       return data;
     }
 
@@ -377,13 +380,13 @@ export function loadStore(): AppStoreData {
     const rawV1 = localStorage.getItem(STORAGE_KEY_V1);
     if (rawV1) {
       const parsedV1 = JSON.parse(rawV1) as Partial<AppStoreData>;
-      const migrated = migrateV1ToV2(parsedV1);
+      const migrated = recalculateAllStudyScoresService(migrateV1ToV2(parsedV1));
       saveStore(migrated);
       return migrated;
     }
 
     // 3. Brand new setup: initialize default store in v2
-    const initial = getDefaultStore();
+    const initial = recalculateAllStudyScoresService(getDefaultStore());
     saveStore(initial);
     return initial;
   } catch (err) {
@@ -475,6 +478,9 @@ export function recalculateTopicDomainService(
     overdueCardsCount: overdueCount,
     recentSessions: topicSessions,
     lastStudiedAt: topic.last_studied_at,
+    examBlockCode: topic.exam_block_code,
+    discursiveEligible: topic.discursive_eligible,
+    discursiveSynergy: topic.discursive_synergy,
   });
 
   const updatedTopics = store.topics.map((t) => {
@@ -512,6 +518,9 @@ export function recalculateAllStudyScoresService(store: AppStoreData): AppStoreD
       overdueCardsCount: overdueCount,
       recentSessions: topicSessions,
       lastStudiedAt: topic.last_studied_at,
+      examBlockCode: topic.exam_block_code,
+      discursiveEligible: topic.discursive_eligible,
+      discursiveSynergy: topic.discursive_synergy,
     });
 
     return {
@@ -565,6 +574,7 @@ export function recordQuestionSessionAction(
 
   // Recalculate domain and scores for this topic
   nextStore = recalculateTopicDomainService(sessionData.topic_id, nextStore);
+  nextStore = recalculateAllStudyScoresService(nextStore);
 
   // Log study event
   const event: StudyEvent = {
@@ -598,7 +608,7 @@ export function recordErrorLogAction(
     updated_at: new Date().toISOString(),
   };
 
-  const nextStore = {
+  let nextStore: AppStoreData = {
     ...store,
     errorLogs: [newError, ...store.errorLogs],
     events: [
@@ -615,6 +625,8 @@ export function recordErrorLogAction(
     ],
   };
 
+  nextStore = recalculateTopicDomainService(errorData.topic_id, nextStore);
+  nextStore = recalculateAllStudyScoresService(nextStore);
   saveStore(nextStore);
   return { store: nextStore, errorId: id };
 }
