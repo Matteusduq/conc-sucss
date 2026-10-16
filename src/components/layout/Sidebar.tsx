@@ -15,6 +15,8 @@ import {
   Settings,
   Sparkles,
   Compass,
+  LogOut,
+  User as UserIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 
@@ -31,7 +33,12 @@ export const NAV_ITEMS = [
   { href: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  userEmail?: string | null;
+  onSignOut?: () => void;
+}
+
+export function Sidebar({ userEmail, onSignOut }: SidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -79,20 +86,52 @@ export function Sidebar() {
         </nav>
       </div>
 
-      {/* Footer / Future AI status indicator */}
-      <div className="p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/60 text-[11px] space-y-1">
-        <div className="flex items-center justify-between text-zinc-400">
-          <span className="flex items-center gap-1.5 font-medium">
-            <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
-            Módulo IA
-          </span>
-          <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
-            Preparado
-          </span>
+      <div className="space-y-3">
+        {/* User Account / Sair */}
+        {userEmail && (
+          <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0">
+                <UserIcon className="w-3.5 h-3.5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-zinc-200 truncate" title={userEmail}>
+                  {userEmail}
+                </p>
+                <span className="text-[9px] text-emerald-400 font-mono flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  Supabase RLS
+                </span>
+              </div>
+            </div>
+            {onSignOut && (
+              <button
+                type="button"
+                onClick={onSignOut}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors"
+                title="Sair da conta"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Footer / Future AI status indicator */}
+        <div className="p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/60 text-[11px] space-y-1">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="flex items-center gap-1.5 font-medium">
+              <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
+              Módulo IA
+            </span>
+            <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
+              Preparado
+            </span>
+          </div>
+          <p className="text-[10px] text-zinc-400 leading-tight">
+            Motor determinístico ativo. Nenhuma chamada de API externa requerida.
+          </p>
         </div>
-        <p className="text-[10px] text-zinc-400 leading-tight">
-          Motor determinístico ativo. Nenhuma chamada de API externa requerida.
-        </p>
       </div>
     </aside>
   );

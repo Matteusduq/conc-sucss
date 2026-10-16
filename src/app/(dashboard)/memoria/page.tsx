@@ -13,7 +13,7 @@ import { Brain, Plus, Play, Sparkles, CheckCircle2, Clock } from 'lucide-react';
 import { Rating } from 'ts-fsrs';
 
 export default function MemoriaPage() {
-  const { store, openCardModal } = useModal();
+  const { store, openCardModal, updateStore } = useModal();
   const [isReviewing, setIsReviewing] = useState<boolean>(false);
 
   const dueCards = getDueFlashcards(store);
@@ -39,8 +39,24 @@ export default function MemoriaPage() {
         <FlashcardReviewer
           cards={dueCards}
           desiredRetention={store.settings.desired_retention}
-          onReviewCard={(cardId, rating, duration) => {
-            reviewFlashcardAction(cardId, rating, duration, store);
+          onReviewCard={async (cardId, rating, duration) => {
+            const nextStore = reviewFlashcardAction(cardId, rating, duration, store);
+            await updateStore(
+              () => nextStore,
+              async (repo, uId) => {
+                const latestReview = nextStore.reviews[0];
+                const latestFsrs = nextStore.fsrsStates[cardId];
+                if (latestReview && latestFsrs) {
+                  await repo.persistFlashcardReview(uId, latestReview, latestFsrs);
+                }
+                await repo.persistGamification(
+                  uId,
+                  nextStore.gamificationProfile,
+                  nextStore.xpTransactions,
+                  nextStore.unlockedAchievements
+                );
+              }
+            );
           }}
           onFinish={() => setIsReviewing(false)}
         />

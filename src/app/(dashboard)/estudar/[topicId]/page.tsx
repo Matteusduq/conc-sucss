@@ -12,7 +12,7 @@ import { updateMaterialProgressAction } from '@/lib/data/store';
 
 export default function EstudarPage({ params }: { params: Promise<{ topicId: string }> }) {
   const resolvedParams = use(params);
-  const { store, openTecModal, openCardModal } = useModal();
+  const { store, user, openTecModal, openCardModal, updateStore } = useModal();
 
   const topic = store.topics.find((t) => t.id === resolvedParams.topicId);
   const material = store.materials.find((m) => m.topic_id === resolvedParams.topicId);
@@ -34,28 +34,58 @@ export default function EstudarPage({ params }: { params: Promise<{ topicId: str
     (topic.status === 'NOT_STARTED' || topic.status === 'LEARNING') &&
     (material.status === 'PENDING' || !material.storage_path);
 
-  const handleUpdateProgress = (data: Record<string, unknown>) => {
-    updateMaterialProgressAction(
+  const handleUpdateProgress = async (data: Record<string, unknown>) => {
+    const currentUserId = user?.id || 'local-user';
+    const nextStore = updateMaterialProgressAction(
       {
         material_id: material.id,
         topic_id: topic.id,
-        user_id: 'local-user',
+        user_id: currentUserId,
         ...data,
       },
       store
     );
+    await updateStore(
+      () => nextStore,
+      async (repo, uId) => {
+        const prog = nextStore.materialProgress[material.id];
+        if (prog) {
+          await repo.persistMaterialProgress(uId, prog);
+        }
+      }
+    );
   };
 
-  const handleCompleteMaterial = () => {
-    updateMaterialProgressAction(
+  const handleCompleteMaterial = async () => {
+    const currentUserId = user?.id || 'local-user';
+    const nextStore = updateMaterialProgressAction(
       {
         material_id: material.id,
         topic_id: topic.id,
-        user_id: 'local-user',
+        user_id: currentUserId,
         completed: true,
         progress_percent: 100,
       },
       store
+    );
+    await updateStore(
+      () => nextStore,
+      async (repo, uId) => {
+        const prog = nextStore.materialProgress[material.id];
+        if (prog) {
+          await repo.persistMaterialProgress(uId, prog);
+        }
+        const updatedTopic = nextStore.topics.find((t) => t.id === topic.id);
+        if (updatedTopic) {
+          await repo.persistTopic(uId, updatedTopic);
+        }
+        await repo.persistGamification(
+          uId,
+          nextStore.gamificationProfile,
+          nextStore.xpTransactions,
+          nextStore.unlockedAchievements
+        );
+      }
     );
     // Suggest TEC session immediately
     openTecModal(topic.id);

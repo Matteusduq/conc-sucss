@@ -499,6 +499,10 @@ export function loadStore(): AppStoreData {
   }
 }
 
+/**
+ * @deprecated Legacy local-only backup. Em modo de produção autenticado,
+ * o Supabase é a fonte de verdade persistente gerenciada via SupabaseStudyRepository.
+ */
 export function saveStore(store: AppStoreData) {
   if (typeof window === 'undefined') return;
   try {
@@ -511,6 +515,8 @@ export function saveStore(store: AppStoreData) {
     console.error('Failed to save store to localStorage:', err);
   }
 }
+
+export const saveLocalStoreBackup = saveStore;
 
 // -------------------------------------------------------------
 // Core Business Services

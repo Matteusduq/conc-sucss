@@ -59,27 +59,22 @@ cp .env.example .env.local
 
 Conteúdo de `.env.local`:
 ```env
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sua_chave_publica_aqui
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_chave_publica_aqui
-
-# SOMENTE FUTURO — ainda não ativar nesta etapa
-AI_PROVIDER=
-AI_API_KEY=
-AI_MODEL=
+NEXT_PUBLIC_SUPABASE_URL=https://clwimgalqsgospuhizsz.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_PROJECT_REF=clwimgalqsgospuhizsz
 ```
 
 ### 3.3. Executar Testes Unitários
 ```bash
 npm test
 ```
-Executa a suíte Vitest validando cálculos de acurácia, nota líquida Cebraspe, cálculo de domínio, pontuação discursiva oficial, integridade do edital (P1/P2/P3), migração do store e ordenação FSRS.
+Executa a suíte Vitest (101 testes) validando cálculos de acurácia, nota líquida Cebraspe, cálculo de domínio, pontuação discursiva oficial, integridade do edital (P1/P2/P3), gamificação, FSRS, RLS e repositório Supabase.
 
 ### 3.4. Executar em Desenvolvimento
 ```bash
 npm run dev
 ```
-Acesse `http://localhost:3000`. A aplicação redirecionará automaticamente para o cockpit em `/hoje`.
+Acesse `http://localhost:3000`. Se não autenticado, você será direcionado para `/auth/login`.
 
 ### 3.5. Compilação de Produção
 ```bash
@@ -88,25 +83,24 @@ npm run build
 
 ---
 
-## 4. Estrutura e Banco de Dados Supabase
+## 4. Estrutura e Banco de Dados Supabase (Fase 3)
 
-### 4.1. Migrations (`supabase/migrations/`)
-- `20261014000000_initial_schema.sql`:
-  Criação das tabelas centrais (`profiles`, `exams`, `subjects`, `topics`, `study_materials`, `material_progress`, `study_sessions`, `question_sessions`, `error_logs`, `flashcards`, `flashcard_fsrs_state`, `flashcard_reviews`, `user_study_settings`, `mock_exams`, `study_events`, `ai_insights`), índices e políticas RLS de propriedade restrita (`auth.uid() = user_id`).
-- `20261014000001_storage.sql`:
-  Criação do bucket privado `study-materials` com limite de 100MB e políticas de acesso restritas a `/{user_id}/...`.
-- `20261014000002_complete_exam_structure.sql`:
-  Criação das tabelas `exam_blocks`, `syllabus_items`, `topic_syllabus_items`, `discursive_sessions`, colunas de bloco e relevância em `subjects` e `topics`, metadados de mínimos eliminatórios em `exams`, e políticas RLS.
+### 4.1. Migração Consolidada (`supabase/migrations/`)
+- `20261016000000_consolidated_schema.sql`:
+  Schema inicial consolidado limpo com as **25 tabelas**, chaves compostas `(user_id, id)` para suporte a IDs de domínio textuais (`top-...`, `qs-...`, `fc-...`), índices de performance, grants para `authenticated`, políticas RLS estritas de isolamento por `(auth.uid() = user_id)`, tabela `user_migrations` para importação idempotente e configuração do bucket privado `study-materials`.
+- As migrações antigas pré-Fase 2 foram arquivadas em `docs/archive-migrations/`.
 
-### 4.2. Seed Oficial (`supabase/seed.sql`)
-Função PL/pgSQL `public.seed_camara_exam_data(p_user_id uuid)` que insere com fidelidade:
-1. Concurso **Câmara dos Deputados 2027** com metadados oficiais e mínimos Cebraspe;
-2. Blocos de Prova P1, P2 e P3;
-3. 9 Disciplinas (5 em P1 e 4 em P2);
-4. Unidades de estudo práticas (`topics`) vinculadas a itens oficiais do edital (`syllabus_items`);
-5. Placeholders de material com status `PENDING` ("Aguardando PDF") vinculados 1:1 com as unidades práticas.
-
----
+### 4.2. Bootstrap do Usuário (`src/lib/data/bootstrap-user.ts`)
+Executado automaticamente e de forma idempotente no primeiro login do candidato:
+1. Perfil e configurações de estudo;
+2. Concurso Câmara dos Deputados 2027 com parâmetros oficiais Cebraspe;
+3. Blocos P1, P2 e P3;
+4. 9 Disciplinas oficiais;
+5. **76 Topics** estruturados com StudyScore e starter_rank;
+6. **182 SyllabusItems** do Edital nº 1/2026;
+7. Relações N:N `topic_syllabus_items`;
+8. 76 Placeholders de materiais de estudo (`PENDING`);
+9. Perfil de Gamificação inicial zerado (0 XP, Nível 1).
 
 ## 5. Rotas e Módulos da Aplicação
 

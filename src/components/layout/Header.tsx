@@ -1,15 +1,17 @@
 'use client';
 
 import React from 'react';
-import { Plus, AlertOctagon } from 'lucide-react';
+import { Plus, AlertOctagon, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 interface HeaderProps {
+  userEmail?: string | null;
   onOpenTecModal: () => void;
   onOpenErrorModal: () => void;
+  onSignOut?: () => void;
 }
 
-export function Header({ onOpenTecModal, onOpenErrorModal }: HeaderProps) {
+export function Header({ userEmail, onOpenTecModal, onOpenErrorModal, onSignOut }: HeaderProps) {
   return (
     <header className="h-16 border-b border-zinc-800 bg-zinc-950/70 backdrop-blur-md px-4 md:px-8 flex items-center justify-between sticky top-0 z-30">
       <div className="flex items-center gap-3">
@@ -38,6 +40,18 @@ export function Header({ onOpenTecModal, onOpenErrorModal }: HeaderProps) {
           <Plus className="w-3.5 h-3.5 mr-1 text-zinc-950" />
           Registrar Sessão TEC
         </Button>
+
+        {onSignOut && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={onSignOut}
+            className="text-xs text-zinc-400 hover:text-red-400 md:hidden ml-1"
+            title="Sair"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </Button>
+        )}
       </div>
     </header>
   );

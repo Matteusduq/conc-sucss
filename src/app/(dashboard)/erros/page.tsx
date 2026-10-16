@@ -17,10 +17,9 @@ import {
 } from 'lucide-react';
 import { ERROR_TYPE_OPTIONS } from '@/components/performance/ErrorLogModal';
 import { formatDateBr } from '@/lib/utils/date';
-import { saveStore } from '@/lib/data/store';
 
 export default function ErrosPage() {
-  const { store, openErrorModal, openCardModal, refreshStore } = useModal();
+  const { store, openErrorModal, openCardModal, refreshStore, updateStore } = useModal();
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterResolved, setFilterResolved] = useState<'ALL' | 'UNRESOLVED' | 'RESOLVED'>('ALL');
 
@@ -54,15 +53,17 @@ export default function ErrosPage() {
       };
     });
 
-  const toggleResolved = (errorId: string) => {
+  const toggleResolved = async (errorId: string) => {
+    let resolvedItem: (typeof errors)[0] | undefined;
     const updatedErrors = store.errorLogs.map((e) => {
       if (e.id === errorId) {
-        return {
+        resolvedItem = {
           ...e,
           resolved: !e.resolved,
           resolved_at: !e.resolved ? new Date().toISOString() : null,
           updated_at: new Date().toISOString(),
         };
+        return resolvedItem;
       }
       return e;
     });
@@ -71,8 +72,15 @@ export default function ErrosPage() {
       ...store,
       errorLogs: updatedErrors,
     };
-    saveStore(updatedStore);
-    refreshStore();
+
+    await updateStore(
+      () => updatedStore,
+      async (repo, uId) => {
+        if (resolvedItem) {
+          await repo.persistErrorLog(uId, resolvedItem);
+        }
+      }
+    );
   };
 
   const handleConvertToFlashcard = (err: (typeof errors)[0]) => {

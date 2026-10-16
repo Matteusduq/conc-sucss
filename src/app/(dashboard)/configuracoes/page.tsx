@@ -9,7 +9,7 @@ import { Save, CheckCircle, ExternalLink, Sparkles, Sliders, Shield } from 'luci
 import { saveStore } from '@/lib/data/store';
 
 export default function ConfiguracoesPage() {
-  const { store, refreshStore } = useModal();
+  const { store, user, userEmail, updateStore } = useModal();
   const [examDate, setExamDate] = useState(store.exam.exam_date || '2027-01-17');
   const [weeklyMinutes, setWeeklyMinutes] = useState(store.settings.weekly_study_target_minutes || 1080);
   const [memoryMinutes, setMemoryMinutes] = useState(store.settings.memory_daily_minutes || 25);
@@ -34,32 +34,39 @@ export default function ConfiguracoesPage() {
 
   const [saved, setSaved] = useState(false);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const updatedSettings = {
+      ...store.settings,
+      weekly_study_target_minutes: Number(weeklyMinutes),
+      memory_daily_minutes: Number(memoryMinutes),
+      desired_retention: Number(desiredRetention),
+      default_high_questions: Number(highQ),
+      default_medium_questions: Number(medQ),
+      default_low_questions: Number(lowQ),
+      gamification_show_animations: showAnimations,
+      gamification_show_xp_toast: showXpToast,
+      gamification_show_streak: showStreak,
+      gamification_weekly_target_days: Number(weeklyTargetDays),
+      updated_at: new Date().toISOString(),
+    };
+
     const updatedStore = {
       ...store,
       exam: {
         ...store.exam,
         exam_date: examDate,
       },
-      settings: {
-        ...store.settings,
-        weekly_study_target_minutes: Number(weeklyMinutes),
-        memory_daily_minutes: Number(memoryMinutes),
-        desired_retention: Number(desiredRetention),
-        default_high_questions: Number(highQ),
-        default_medium_questions: Number(medQ),
-        default_low_questions: Number(lowQ),
-        gamification_show_animations: showAnimations,
-        gamification_show_xp_toast: showXpToast,
-        gamification_show_streak: showStreak,
-        gamification_weekly_target_days: Number(weeklyTargetDays),
-        updated_at: new Date().toISOString(),
-      },
+      settings: updatedSettings,
     };
 
-    saveStore(updatedStore);
-    refreshStore();
+    await updateStore(
+      () => updatedStore,
+      async (repo, uId) => {
+        await repo.persistSettings(uId, updatedSettings);
+      }
+    );
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -77,6 +84,35 @@ export default function ConfiguracoesPage() {
           </p>
         </div>
       </div>
+
+      {/* Backend & Supabase Status Card */}
+      <Card className="p-5 border-indigo-500/30 bg-indigo-950/10 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-sm font-semibold text-white">
+              Backend Supabase Conectado
+            </span>
+          </div>
+          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+            Sincronização Ativa
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-1 text-zinc-300">
+          <div>
+            <span className="text-zinc-500 block text-[11px]">Conta Autenticada</span>
+            <span className="font-mono text-zinc-200">{userEmail || 'Usuário Local'}</span>
+          </div>
+          <div>
+            <span className="text-zinc-500 block text-[11px]">Projeto Supabase</span>
+            <span className="font-mono text-zinc-200">clwimgalqsgospuhizsz</span>
+          </div>
+          <div>
+            <span className="text-zinc-500 block text-[11px]">Isolamento</span>
+            <span className="text-zinc-200">Row Level Security (RLS)</span>
+          </div>
+        </div>
+      </Card>
 
       <form onSubmit={handleSave} className="space-y-6">
         {/* 1. Concurso e Banca */}

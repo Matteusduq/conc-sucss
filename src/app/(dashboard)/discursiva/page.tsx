@@ -14,14 +14,11 @@ import {
 import { computeDiscursiveKPIs } from '@/lib/study-engine/discursive';
 import { PenTool, Plus, Trash2, BookOpen, AlertCircle, Award } from 'lucide-react';
 import { formatDateBr } from '@/lib/utils/date';
+import { useModal } from '@/components/layout/DashboardLayoutClient';
 
 export default function DiscursivePage() {
-  const [store, setStore] = useState<AppStoreData | null>(null);
+  const { store, user, updateStore } = useModal();
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  useEffect(() => {
-    setStore(loadStore());
-  }, []);
 
   if (!store) {
     return (
@@ -36,15 +33,34 @@ export default function DiscursivePage() {
   const subjectMap = new Map(store.subjects.map((s) => [s.id, s.name]));
   const topicMap = new Map(store.topics.map((t) => [t.id, t.name]));
 
-  const handleSaveSession = (sessionData: Parameters<typeof recordDiscursiveSessionAction>[0]) => {
-    const { store: nextStore } = recordDiscursiveSessionAction(sessionData, store);
-    setStore(nextStore);
+  const handleSaveSession = async (sessionData: Parameters<typeof recordDiscursiveSessionAction>[0]) => {
+    const currentUserId = user?.id || 'local-user';
+    const { store: nextStore, session } = recordDiscursiveSessionAction(
+      {
+        ...sessionData,
+        user_id: currentUserId,
+      },
+      store
+    );
+
+    await updateStore(
+      () => nextStore,
+      async (repo, uId) => {
+        await repo.persistDiscursiveSession(uId, session);
+        await repo.persistGamification(
+          uId,
+          nextStore.gamificationProfile,
+          nextStore.xpTransactions,
+          nextStore.unlockedAchievements
+        );
+      }
+    );
   };
 
-  const handleDeleteSession = (id: string) => {
+  const handleDeleteSession = async (id: string) => {
     if (confirm('Deseja excluir este registro de treino discursivo?')) {
       const nextStore = deleteDiscursiveSessionAction(id, store);
-      setStore(nextStore);
+      await updateStore(() => nextStore);
     }
   };
 

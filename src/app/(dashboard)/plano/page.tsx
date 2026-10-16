@@ -25,7 +25,7 @@ import { formatDateBr } from '@/lib/utils/date';
 import { updateTopicPriorityAction, saveStore } from '@/lib/data/store';
 
 export default function PlanoPage() {
-  const { store, openTecModal, refreshStore } = useModal();
+  const { store, openTecModal, refreshStore, updateStore } = useModal();
   const [search, setSearch] = useState('');
   const [selectedBlock, setSelectedBlock] = useState<'ALL' | 'P1' | 'P2'>('ALL');
   const [selectedSubject, setSelectedSubject] = useState<string>('ALL');
@@ -86,10 +86,17 @@ export default function PlanoPage() {
     subjectMap,
   ]);
 
-  const handlePriorityChange = (topicId: string, newPriority: Priority) => {
+  const handlePriorityChange = async (topicId: string, newPriority: Priority) => {
     const nextStore = updateTopicPriorityAction(topicId, newPriority, undefined, store);
-    saveStore(nextStore);
-    refreshStore();
+    await updateStore(
+      () => nextStore,
+      async (repo, uId) => {
+        const updatedTopic = nextStore.topics.find((t) => t.id === topicId);
+        if (updatedTopic) {
+          await repo.persistTopic(uId, updatedTopic);
+        }
+      }
+    );
   };
 
   return (
