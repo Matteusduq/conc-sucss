@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { JourneyPhaseInfo } from '@/lib/gamification/journey';
-import { Swords, CheckCircle2, Clock, Calendar, Trophy, ArrowRight } from 'lucide-react';
+import { Swords, CheckCircle2, Clock, Calendar, ArrowRight, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 interface WeeklyBossProps {
@@ -10,13 +10,14 @@ interface WeeklyBossProps {
   isCompletedThisWeek: boolean;
   completedAt?: string;
   onOpenRecordModal: () => void;
+  unmetBossMockReason?: string;
 }
 
 export function WeeklyBoss({
   phaseInfo,
   isCompletedThisWeek,
-  completedAt,
   onOpenRecordModal,
+  unmetBossMockReason,
 }: WeeklyBossProps) {
   const boss = phaseInfo.weeklyBossRecommendation;
 
@@ -58,6 +59,19 @@ export function WeeklyBoss({
           </span>
         )}
       </div>
+
+      {/* Unmet Boss Warning if registered mock did not qualify */}
+      {!isCompletedThisWeek && unmetBossMockReason && (
+        <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/60 text-xs text-amber-200 flex items-start gap-2.5">
+          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div>
+            <div className="font-semibold text-amber-300">
+              Simulado registrado, mas não completou o Checkpoint Semanal:
+            </div>
+            <div className="text-zinc-300 mt-0.5">{unmetBossMockReason}</div>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <div className="text-sm font-semibold text-zinc-200">

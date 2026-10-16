@@ -163,6 +163,7 @@ export interface Topic {
   domain_score: number | null;
   domain_confidence: DomainConfidence | null;
   study_score: number;
+  starter_rank?: number | null;
   last_studied_at: string | null;
   next_recommended_at: string | null;
   tec_filter_hint: string | null;
@@ -308,6 +309,7 @@ export interface FlashcardReview {
   state_before: Record<string, unknown>;
   state_after: Record<string, unknown>;
   fsrs_log: Record<string, unknown> | null;
+  was_due_at_review?: boolean;
   created_at: string;
 }
 

@@ -58,6 +58,7 @@ export interface DailyMission {
   reason: string;
   source: string;
   is_main?: boolean;
+  is_executable?: boolean;
   cta_url?: string;
   cta_label?: string;
   created_at: string;
@@ -99,28 +100,36 @@ export interface WeeklyBossGoal {
   mock_exam_id?: string;
 }
 
+export type PreparationConfidence = 'NO_DATA' | 'LOW' | 'MEDIUM' | 'HIGH';
+
 export interface AcademicProgressResult {
   overallIndex: number; // 0 to 100
-  editalCoveragePercent: number; // 0 to 100
+  overallProgress: number; // 0 to 100 (alias)
+  coveragePercent: number; // Topics iniciados (0-100)
+  meaningfulCoveragePercent: number; // AWAITING_QUESTIONS, CONSOLIDATING, MASTERED, MAINTENANCE, AT_RISK
+  editalCoveragePercent: number; // legacy alias
   p1CoveragePercent: number;
   p2CoveragePercent: number;
-  averageDomainScore: number;
-  retentionRate: number;
+  averageDomainScore: number | null;
+  domainScore: number | null; // alias
+  retentionRate: number | null;
   discursiveSessionsCount: number;
+  discursiveReadiness: number | null;
+  preparationConfidence: PreparationConfidence;
+  riskPenalty: number;
   atRiskTopicsCount: number;
   masteredTopicsCount: number;
   breakdown: {
     coverageComponent: number;
-    domainComponent: number;
-    retentionComponent: number;
-    discursiveComponent: number;
-    riskComponent: number;
+    domainComponent: number | null;
+    retentionComponent: number | null;
+    discursiveComponent: number | null;
+    riskPenalty: number;
   };
   weights: {
     coverage: number;
     domain: number;
     retention: number;
     discursive: number;
-    risk: number;
   };
 }

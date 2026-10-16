@@ -325,6 +325,7 @@ export const P1_ADMINISTRATIVO_TOPICS: Topic[] = [
     is_discursive_relevant: false,
     recommended_material_type: 'FULL_PDF',
     status: 'NOT_STARTED',
+    starter_rank: 7,
     display_order: 10,
     estimated_minutes: null,
     domain_score: null,

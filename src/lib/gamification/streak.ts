@@ -5,6 +5,7 @@ import {
   FlashcardReview,
   DiscursiveSession,
   MockExam,
+  StudySession,
 } from '@/types/database';
 
 export const MEANINGFUL_STUDY_RULES = {
@@ -22,6 +23,7 @@ export interface MeaningfulStudyContext {
   reviews: FlashcardReview[];
   discursiveSessions: DiscursiveSession[];
   mockExams: MockExam[];
+  studySessions?: StudySession[];
 }
 
 /**
@@ -30,7 +32,7 @@ export interface MeaningfulStudyContext {
  *
  * Rules: Requires at least ONE substantial pedagogical activity:
  * 1. Question session with >= 10 items
- * 2. Study of material >= 20 minutes OR material completed on that date
+ * 2. Study of material >= 20 minutes (via StudySession) OR material completed on that date
  * 3. >= 10 due FSRS reviews on that date
  * 4. 1 discursive session on that date
  * 5. 1 mock exam / checkpoint on that date
@@ -40,40 +42,42 @@ export function isMeaningfulStudyDay(
   context: MeaningfulStudyContext
 ): boolean {
   // 1. Question sessions >= 10 questions
-  const hasSubstantialQuestions = context.questionSessions.some((s) => {
+  const hasSubstantialQuestions = (context.questionSessions || []).some((s) => {
     const sDate = getLocalDateString(s.performed_at);
     return sDate === targetDate && s.total_questions >= MEANINGFUL_STUDY_RULES.MIN_QUESTIONS_SESSION;
   });
   if (hasSubstantialQuestions) return true;
 
-  // 2. Material progress >= 20 minutes OR completed on that day
-  const hasSubstantialMaterial = Object.values(context.materialProgress).some((mp) => {
-    if (mp.completed_at && getLocalDateString(mp.completed_at) === targetDate) {
-      return true;
-    }
-    if (mp.last_opened_at && getLocalDateString(mp.last_opened_at) === targetDate) {
-      return mp.total_study_seconds >= MEANINGFUL_STUDY_RULES.MIN_MATERIAL_STUDY_SECONDS;
-    }
-    return false;
-  });
-  if (hasSubstantialMaterial) return true;
+  // 2. StudySession (MATERIAL) on targetDate >= 20 min (1200s) OR material completed on that day
+  const materialSessionsSeconds = (context.studySessions || [])
+    .filter((ss) => ss.session_type === 'MATERIAL' && getLocalDateString(ss.started_at) === targetDate)
+    .reduce((sum, ss) => sum + ss.duration_seconds, 0);
 
-  // 3. >= 10 Flashcard reviews
-  const reviewsOnDate = context.reviews.filter(
-    (r) => getLocalDateString(r.reviewed_at) === targetDate
+  if (materialSessionsSeconds >= MEANINGFUL_STUDY_RULES.MIN_MATERIAL_STUDY_SECONDS) {
+    return true;
+  }
+
+  const hasMaterialCompletedToday = Object.values(context.materialProgress || {}).some((mp) => {
+    return mp.completed_at && getLocalDateString(mp.completed_at) === targetDate;
+  });
+  if (hasMaterialCompletedToday) return true;
+
+  // 3. >= 10 Flashcard reviews (due cards only)
+  const dueReviewsOnDate = (context.reviews || []).filter(
+    (r) => getLocalDateString(r.reviewed_at) === targetDate && r.was_due_at_review !== false
   );
-  if (reviewsOnDate.length >= MEANINGFUL_STUDY_RULES.MIN_FLASHCARD_REVIEWS) {
+  if (dueReviewsOnDate.length >= MEANINGFUL_STUDY_RULES.MIN_FLASHCARD_REVIEWS) {
     return true;
   }
 
   // 4. Discursive session
-  const hasDiscursive = context.discursiveSessions.some(
+  const hasDiscursive = (context.discursiveSessions || []).some(
     (ds) => getLocalDateString(ds.performed_at) === targetDate
   );
   if (hasDiscursive) return true;
 
   // 5. Mock exam
-  const hasMockExam = context.mockExams.some(
+  const hasMockExam = (context.mockExams || []).some(
     (me) => getLocalDateString(me.performed_at) === targetDate
   );
   if (hasMockExam) return true;
@@ -89,8 +93,8 @@ export function getAllMeaningfulStudyDates(context: MeaningfulStudyContext): str
 
   // Gather candidate dates from all activities
   context.questionSessions.forEach((s) => datesSet.add(getLocalDateString(s.performed_at)));
+  (context.studySessions || []).forEach((ss) => datesSet.add(getLocalDateString(ss.started_at)));
   Object.values(context.materialProgress).forEach((mp) => {
-    if (mp.last_opened_at) datesSet.add(getLocalDateString(mp.last_opened_at));
     if (mp.completed_at) datesSet.add(getLocalDateString(mp.completed_at));
   });
   context.reviews.forEach((r) => datesSet.add(getLocalDateString(r.reviewed_at)));

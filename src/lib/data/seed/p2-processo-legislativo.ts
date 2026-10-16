@@ -29,6 +29,7 @@ export const P2_PROCESSO_LEGISLATIVO_TOPICS: Topic[] = [
     discursive_synergy: 'HIGH',
     recommended_material_type: 'FULL_PDF',
     status: 'NOT_STARTED',
+    starter_rank: 3,
     display_order: 1,
     estimated_minutes: null,
     domain_score: null,

@@ -16,7 +16,9 @@ import {
 } from './streak';
 import { evaluateAchievements } from './achievements';
 import { updateMissionsProgress } from './missions';
-import { getLocalDateString } from '@/lib/utils/date';
+import { getLocalDateString, getCalendarDaysDiff } from '@/lib/utils/date';
+import { qualifiesForWeeklyBoss } from './mock-exam';
+import { calculateJourneyPhase } from './journey';
 
 /**
  * Pure, deterministic central engine for gamification.
@@ -94,37 +96,45 @@ export function processGamification(
 
   for (const session of sortedSessions) {
     if (!session.total_questions || session.total_questions <= 0) continue;
+    const sessionKey = `QUESTIONS_VOLUME_${session.id}::${session.id}`;
+    const sessionBonusKey = `QUESTIONS_SESSION_15_BONUS_${session.id}::${session.id}`;
+
     const sessionDate = getLocalDateString(session.performed_at);
 
     // Rule: Volume XP
-    const currentDayXp = questionXpByDate[sessionDate] || 0;
-    const availableUnderCap = Math.max(
-      0,
-      GAMIFICATION_RULES.QUESTIONS.DAILY_VOLUME_CAP - currentDayXp
-    );
-
-    if (availableUnderCap > 0) {
-      const potentialXp = Math.min(
-        GAMIFICATION_RULES.QUESTIONS.MAX_XP_PER_SESSION,
-        session.total_questions * GAMIFICATION_RULES.QUESTIONS.XP_PER_QUESTION
+    if (!processedRuleKeys.has(sessionKey)) {
+      const currentDayXp = questionXpByDate[sessionDate] || 0;
+      const availableUnderCap = Math.max(
+        0,
+        GAMIFICATION_RULES.QUESTIONS.DAILY_VOLUME_CAP - currentDayXp
       );
-      const awarded = Math.min(potentialXp, availableUnderCap);
-      if (awarded > 0) {
-        addTransaction(
-          `QUESTIONS_VOLUME_${session.id}`,
-          session.id,
-          awarded,
-          'question_session',
-          `${session.total_questions} questões respondidas (+${awarded} XP)`,
-          session.topic_id,
-          session.performed_at
+
+      if (availableUnderCap > 0) {
+        const potentialXp = Math.min(
+          GAMIFICATION_RULES.QUESTIONS.MAX_XP_PER_SESSION,
+          session.total_questions * GAMIFICATION_RULES.QUESTIONS.XP_PER_QUESTION
         );
-        questionXpByDate[sessionDate] = currentDayXp + awarded;
+        const awarded = Math.min(potentialXp, availableUnderCap);
+        if (awarded > 0) {
+          addTransaction(
+            `QUESTIONS_VOLUME_${session.id}`,
+            session.id,
+            awarded,
+            'question_session',
+            `${session.total_questions} questões respondidas (+${awarded} XP)`,
+            session.topic_id,
+            session.performed_at
+          );
+          questionXpByDate[sessionDate] = currentDayXp + awarded;
+        }
       }
     }
 
     // Rule: Bonus >= 15 questions
-    if (session.total_questions >= GAMIFICATION_RULES.QUESTIONS.MIN_QUESTIONS_FOR_BONUS) {
+    if (
+      session.total_questions >= GAMIFICATION_RULES.QUESTIONS.MIN_QUESTIONS_FOR_BONUS &&
+      !processedRuleKeys.has(sessionBonusKey)
+    ) {
       addTransaction(
         `QUESTIONS_SESSION_15_BONUS_${session.id}`,
         session.id,
@@ -138,24 +148,48 @@ export function processGamification(
   }
 
   // -----------------------------------------------------------
-  // 3. STUDY MATERIALS
+  // 3. STUDY MATERIALS & SESSIONS
   // -----------------------------------------------------------
-  for (const [materialId, prog] of Object.entries(store.materialProgress || {})) {
-    // 3a. Study progress session >= 20 min
-    if (prog.total_study_seconds >= GAMIFICATION_RULES.MATERIAL.MIN_SECONDS_FOR_PROGRESS) {
-      const eventDate = prog.last_opened_at || currentDateIso;
-      addTransaction(
-        `MATERIAL_PROGRESS_${materialId}`,
-        materialId,
-        GAMIFICATION_RULES.MATERIAL.XP_PROGRESS_SESSION,
-        'material_progress',
-        `Estudo aprofundado de material didático (>= 20 min) (+${GAMIFICATION_RULES.MATERIAL.XP_PROGRESS_SESSION} XP)`,
-        prog.topic_id,
-        eventDate
-      );
-    }
+  const materialXpByDate: Record<string, number> = {};
+  existingTransactions
+    .filter((t) => t.rule_id.startsWith('MATERIAL_SESSION_'))
+    .forEach((t) => {
+      const d = getLocalDateString(t.created_at);
+      materialXpByDate[d] = (materialXpByDate[d] || 0) + t.amount;
+    });
 
-    // 3b. One-time Topic completion bonus
+  const sortedStudySessions = [...(store.studySessions || [])].sort(
+    (a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime()
+  );
+
+  for (const session of sortedStudySessions) {
+    if (
+      session.session_type === 'MATERIAL' &&
+      session.duration_seconds >= GAMIFICATION_RULES.MATERIAL.MIN_SECONDS_FOR_PROGRESS
+    ) {
+      const txKey = `MATERIAL_SESSION_${session.id}::${session.id}`;
+      if (processedRuleKeys.has(txKey)) continue;
+
+      const sessionDate = getLocalDateString(session.started_at);
+      const dayXp = materialXpByDate[sessionDate] || 0;
+
+      if (dayXp < GAMIFICATION_RULES.MATERIAL.DAILY_PROGRESS_CAP) {
+        addTransaction(
+          `MATERIAL_SESSION_${session.id}`,
+          session.id,
+          GAMIFICATION_RULES.MATERIAL.XP_PROGRESS_SESSION,
+          'study_session',
+          `Sessão de estudo teórico (>= 20 min) (+${GAMIFICATION_RULES.MATERIAL.XP_PROGRESS_SESSION} XP)`,
+          session.topic_id || undefined,
+          session.started_at
+        );
+        materialXpByDate[sessionDate] = dayXp + GAMIFICATION_RULES.MATERIAL.XP_PROGRESS_SESSION;
+      }
+    }
+  }
+
+  // 3b. One-time Topic completion bonus
+  for (const [, prog] of Object.entries(store.materialProgress || {})) {
     if (prog.completed) {
       const completionDate = prog.completed_at || currentDateIso;
       addTransaction(
@@ -186,6 +220,12 @@ export function processGamification(
   );
 
   for (const review of sortedReviews) {
+    if (review.was_due_at_review === false) {
+      continue; // Early manual review outside due queue awards 0 XP
+    }
+    const txKey = `FLASHCARD_DUE_REVIEW_${review.id}::${review.id}`;
+    if (processedRuleKeys.has(txKey)) continue;
+
     const reviewDate = getLocalDateString(review.reviewed_at);
     const dayXp = flashcardXpByDate[reviewDate] || 0;
 
@@ -195,7 +235,7 @@ export function processGamification(
         review.id,
         GAMIFICATION_RULES.FLASHCARDS.XP_PER_DUE_REVIEW,
         'flashcard_review',
-        `Revisão de flashcard FSRS (+1 XP)`,
+        `Revisão de flashcard FSRS devido (+1 XP)`,
         review.flashcard_id,
         review.reviewed_at
       );
@@ -291,22 +331,66 @@ export function processGamification(
   // -----------------------------------------------------------
   // 7. MOCK EXAMS & WEEKLY CHECKPOINTS
   // -----------------------------------------------------------
-  for (const mock of store.mockExams || []) {
-    const isFullMock = mock.type === 'FULL_MOCK';
-    const xpAmt = isFullMock
-      ? GAMIFICATION_RULES.SIMULADOS.XP_FULL_MOCK
-      : GAMIFICATION_RULES.SIMULADOS.XP_WEEKLY_CHECKPOINT;
-    const label = isFullMock ? 'Simulado Completo' : 'Checkpoint Semanal (Boss)';
+  const phaseInfo = calculateJourneyPhase({
+    daysUntilExam: getCalendarDaysDiff(todayStr, '2027-01-17'),
+    totalTopics: store.topics.length,
+    startedTopics: store.topics.filter((t) => t.status !== 'NOT_STARTED').length,
+    meaningfulStartedTopics: store.topics.filter((t) =>
+      ['AWAITING_QUESTIONS', 'CONSOLIDATING', 'MASTERED', 'MAINTENANCE', 'AT_RISK'].includes(t.status)
+    ).length,
+    masteredTopics: store.topics.filter((t) => t.status === 'MASTERED').length,
+    atRiskTopics: store.topics.filter((t) => t.status === 'AT_RISK').length,
+    p1StartedTopics: store.topics.filter((t) => t.exam_block_code === 'P1' && t.status !== 'NOT_STARTED').length,
+    p1TotalTopics: store.topics.filter((t) => t.exam_block_code === 'P1').length,
+    p2StartedTopics: store.topics.filter((t) => t.exam_block_code === 'P2' && t.status !== 'NOT_STARTED').length,
+    p2TotalTopics: store.topics.filter((t) => t.exam_block_code === 'P2').length,
+    averageDomainScore: 0,
+    totalQuestions: (store.questionSessions || []).reduce((sum, s) => sum + s.total_questions, 0),
+    discursiveSessionsCount: (store.discursiveSessions || []).length,
+    mockExamsCount: (store.mockExams || []).length,
+  });
 
-    addTransaction(
-      `MOCK_EXAM_${mock.id}`,
-      mock.id,
-      xpAmt,
-      'mock_exam',
-      `${label} registrado (+${xpAmt} XP)`,
-      undefined,
-      mock.performed_at
-    );
+  for (const mock of store.mockExams || []) {
+    const p1Total = (mock.p1_correct ?? 0) + (mock.p1_wrong ?? 0) + (mock.p1_blank ?? 0);
+    const p2Total = (mock.p2_correct ?? 0) + (mock.p2_wrong ?? 0) + (mock.p2_blank ?? 0);
+
+    if (mock.type === 'FULL_MOCK') {
+      if (p1Total === 90 && p2Total === 90) {
+        addTransaction(
+          `MOCK_EXAM_${mock.id}`,
+          mock.id,
+          GAMIFICATION_RULES.SIMULADOS.XP_FULL_MOCK,
+          'mock_exam',
+          `Simulado Completo Oficial validado (90 P1 + 90 P2) (+${GAMIFICATION_RULES.SIMULADOS.XP_FULL_MOCK} XP)`,
+          undefined,
+          mock.performed_at
+        );
+      }
+    } else if (mock.type === 'WEEKLY_CHECKPOINT') {
+      if (qualifiesForWeeklyBoss(mock, phaseInfo.weeklyBossRecommendation)) {
+        addTransaction(
+          `MOCK_EXAM_${mock.id}`,
+          mock.id,
+          GAMIFICATION_RULES.SIMULADOS.XP_WEEKLY_CHECKPOINT,
+          'mock_exam',
+          `Checkpoint Semanal (Boss) validado (+${GAMIFICATION_RULES.SIMULADOS.XP_WEEKLY_CHECKPOINT} XP)`,
+          undefined,
+          mock.performed_at
+        );
+      }
+    } else if (mock.type === 'PARTIAL_MOCK') {
+      if (mock.total_questions >= GAMIFICATION_RULES.SIMULADOS.MIN_QUESTIONS_FOR_PARTIAL) {
+        addTransaction(
+          `MOCK_EXAM_${mock.id}`,
+          mock.id,
+          GAMIFICATION_RULES.SIMULADOS.XP_PARTIAL_MOCK,
+          'mock_exam',
+          `Simulado Parcial registrado (+${GAMIFICATION_RULES.SIMULADOS.XP_PARTIAL_MOCK} XP)`,
+          undefined,
+          mock.performed_at
+        );
+      }
+    }
   }
 
   // -----------------------------------------------------------
@@ -411,6 +495,7 @@ export function processGamification(
     reviews: store.reviews,
     discursiveSessions: store.discursiveSessions || [],
     mockExams: store.mockExams || [],
+    studySessions: store.studySessions || [],
   });
 
   const streakStats = calculateStreaks(meaningfulDates, todayStr);

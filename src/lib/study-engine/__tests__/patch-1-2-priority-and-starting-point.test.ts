@@ -197,7 +197,7 @@ describe('PATCH 1.2 — Prioridade Inicial Real e Ponto de Partida do Estudo', (
   it('6. Changes in question session performance recalculate queue order', () => {
     let store = getDefaultStore();
 
-    // Initial plan Task 1 is top-p2-asr-1 (P2 HIGH) and Task 2 is top-p1-port-1 (P1 HIGH)
+    // Initial deliberate starter sequence: Rank 1 is top-p2-ling-3 (P2 HIGH) and Rank 2 is top-p1-port-1 (P1 HIGH)
     const initialPlan = generateDailyPlan({
       topics: store.topics,
       subjects: store.subjects,
@@ -205,7 +205,7 @@ describe('PATCH 1.2 — Prioridade Inicial Real e Ponto de Partida do Estudo', (
       errors: store.errorLogs,
       overdueCardsCount: 0,
     });
-    expect(initialPlan.tasks[0].id).toBe('task-top-p2-asr-1');
+    expect(initialPlan.tasks[0].id).toBe('task-top-p2-ling-3');
     expect(initialPlan.tasks[1].id).toBe('task-top-p1-port-1');
 
     // Record a poor session with low accuracy and negative net points on top-p1-port-1

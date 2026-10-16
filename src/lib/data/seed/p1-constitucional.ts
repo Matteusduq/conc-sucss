@@ -160,6 +160,7 @@ export const P1_CONSTITUCIONAL_TOPICS: Topic[] = [
     is_discursive_relevant: false,
     recommended_material_type: 'FULL_PDF',
     status: 'NOT_STARTED',
+    starter_rank: 4,
     display_order: 5,
     estimated_minutes: null,
     domain_score: null,

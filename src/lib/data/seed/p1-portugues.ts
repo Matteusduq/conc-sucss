@@ -28,6 +28,7 @@ export const P1_PORTUGUES_TOPICS: Topic[] = [
     is_discursive_relevant: false,
     recommended_material_type: 'FULL_PDF',
     status: 'NOT_STARTED',
+    starter_rank: 2,
     display_order: 1,
     estimated_minutes: null,
     domain_score: null,

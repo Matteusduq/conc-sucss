@@ -7,6 +7,7 @@ export interface JourneyPhaseContext {
   daysUntilExam: number;
   totalTopics: number;
   startedTopics: number;
+  meaningfulStartedTopics?: number;
   masteredTopics: number;
   atRiskTopics: number;
   p1StartedTopics: number;
@@ -49,6 +50,7 @@ export function calculateJourneyPhase(context: JourneyPhaseContext): JourneyPhas
     daysUntilExam,
     totalTopics,
     startedTopics,
+    meaningfulStartedTopics,
     p1StartedTopics,
     p1TotalTopics,
     p2StartedTopics,
@@ -56,6 +58,10 @@ export function calculateJourneyPhase(context: JourneyPhaseContext): JourneyPhas
   } = context;
 
   const coveragePercent = totalTopics > 0 ? Math.round((startedTopics / totalTopics) * 100) : 0;
+  const meaningfulCoverage =
+    meaningfulStartedTopics !== undefined
+      ? Math.round((meaningfulStartedTopics / Math.max(1, totalTopics)) * 100)
+      : coveragePercent;
   const p1CoveragePercent = p1TotalTopics > 0 ? Math.round((p1StartedTopics / p1TotalTopics) * 100) : 0;
   const p2CoveragePercent = p2TotalTopics > 0 ? Math.round((p2StartedTopics / p2TotalTopics) * 100) : 0;
 
@@ -71,7 +77,7 @@ export function calculateJourneyPhase(context: JourneyPhaseContext): JourneyPhas
   } else if (daysUntilExam >= 15 && daysUntilExam <= 30) {
     phase = 'EXAM_MODE';
     phaseNumber = 3;
-  } else if (daysUntilExam <= 60 || coveragePercent >= COVERAGE_CONSOLIDATION_THRESHOLD) {
+  } else if (daysUntilExam <= 60 || meaningfulCoverage >= COVERAGE_CONSOLIDATION_THRESHOLD) {
     phase = 'CONSOLIDATION';
     phaseNumber = 2;
   } else {
@@ -226,74 +232,142 @@ function getPhaseDetails(
  * Calculates academic preparation progress (Progresso da Preparação).
  * Distinct from XP, this measures actual curricular maturity according to edital requirements.
  *
- * Formula components:
- * - Edital Coverage (35%): started topics / 76
- * - Domain Mastery (30%): average domain score of studied topics
- * - FSRS Retention (15%): retention rate or default 90%
- * - Discursive Practice (10%): min(100, sessions * 25)
- * - Risk Management (10%): max(0, 100 - atRisk * 20)
+ * Rules:
+ * - Base weights: Coverage (35%), Domain (35%), Retention (15%), Discursive (15%).
+ * - Unavailable components (domain null, retention null, discursive null) are NOT replaced by defaults;
+ *   their base weights are proportionally redistributed to available components.
+ * - Brand new user has 0% progress and 'NO_DATA' confidence.
+ * - Risk is a PENALTY (max 20 points), not a bonus.
+ * - Discursive readiness blends quality (70%) and volume (30%).
  */
 export function calculateAcademicProgress(
   topics: Topic[],
-  discursiveSessions: DiscursiveSession[],
-  retentionRate: number | null
+  discursiveSessions: DiscursiveSession[] = [],
+  retentionRate: number | null = null,
+  totalQuestions: number = 0,
+  reviewsCount: number = 0
 ): AcademicProgressResult {
   const totalTopics = topics.length || 76;
   const startedTopics = topics.filter((t) => t.status !== 'NOT_STARTED').length;
+  const meaningfulTopics = topics.filter((t) =>
+    ['AWAITING_QUESTIONS', 'CONSOLIDATING', 'MASTERED', 'MAINTENANCE', 'AT_RISK'].includes(t.status)
+  ).length;
+
+  const coveragePercent = Math.round((startedTopics / totalTopics) * 100);
+  const meaningfulCoveragePercent = Math.round((meaningfulTopics / totalTopics) * 100);
+
   const p1Topics = topics.filter((t) => t.exam_block_code === 'P1');
   const p2Topics = topics.filter((t) => t.exam_block_code === 'P2');
-
   const p1Started = p1Topics.filter((t) => t.status !== 'NOT_STARTED').length;
   const p2Started = p2Topics.filter((t) => t.status !== 'NOT_STARTED').length;
-
-  const atRiskCount = topics.filter((t) => t.status === 'AT_RISK').length;
-  const masteredCount = topics.filter((t) => t.status === 'MASTERED').length;
-
-  const editalCoveragePercent = Math.round((startedTopics / totalTopics) * 100);
   const p1CoveragePercent = p1Topics.length > 0 ? Math.round((p1Started / p1Topics.length) * 100) : 0;
   const p2CoveragePercent = p2Topics.length > 0 ? Math.round((p2Started / p2Topics.length) * 100) : 0;
 
-  // Average domain score of studied topics
-  const studiedWithScore = topics.filter((t) => t.domain_score !== null && t.domain_score !== undefined);
-  const averageDomainScore =
+  const atRiskTopics = topics.filter((t) => t.status === 'AT_RISK');
+  const atRiskCount = atRiskTopics.length;
+  const masteredCount = topics.filter((t) => t.status === 'MASTERED').length;
+
+  // 1. Coverage Component (always available, 0-100)
+  const coverageComponent = coveragePercent;
+
+  // 2. Domain Component (null if no studied topics with domain_score)
+  const studiedWithScore = topics.filter(
+    (t) => t.domain_score !== null && t.domain_score !== undefined
+  );
+  const domainComponent =
     studiedWithScore.length > 0
       ? Math.round(studiedWithScore.reduce((sum, t) => sum + (t.domain_score || 0), 0) / studiedWithScore.length)
-      : 0;
+      : null;
 
-  const retention = retentionRate !== null ? retentionRate : 90;
-  const discursiveSessionsCount = discursiveSessions ? discursiveSessions.length : 0;
+  // 3. Retention Component (null if retentionRate is null/undefined)
+  const retentionComponent =
+    retentionRate !== null && retentionRate !== undefined
+      ? Math.min(100, Math.max(0, retentionRate))
+      : null;
 
-  // Components (0-100)
-  const coverageComponent = editalCoveragePercent;
-  const domainComponent = averageDomainScore;
-  const retentionComponent = Math.min(100, Math.max(0, retention));
-  const discursiveComponent = Math.min(100, discursiveSessionsCount * 25);
-  const riskComponent = Math.max(0, 100 - atRiskCount * 20);
+  // 4. Discursive Readiness Component (null if user has never trained P3)
+  let discursiveComponent: number | null = null;
+  if (discursiveSessions && discursiveSessions.length > 0) {
+    const scores = discursiveSessions.map((ds) => {
+      const calc = ds.calculated_score ?? 0;
+      if (ds.type === 'QUESTION_20_LINES') {
+        return Math.min(1, Math.max(0, calc / 15));
+      }
+      return Math.min(1, Math.max(0, calc / 30));
+    });
+    const qualityScore = (scores.reduce((a, b) => a + b, 0) / Math.max(1, scores.length)) * 100;
+    const volumeScore = Math.min(100, (discursiveSessions.length / 6) * 100);
+    discursiveComponent = Math.min(100, Math.max(0, Math.round(qualityScore * 0.70 + volumeScore * 0.30)));
+  }
 
-  const weights = {
-    coverage: 0.35,
-    domain: 0.30,
-    retention: 0.15,
-    discursive: 0.10,
-    risk: 0.10,
+  // Dynamic weight redistribution (Section 6)
+  // Base weights: coverage 35, domain 35, retention 15, discursive 15
+  const baseWeights = {
+    coverage: 35,
+    domain: 35,
+    retention: 15,
+    discursive: 15,
   };
 
-  const overallIndex = Math.round(
-    coverageComponent * weights.coverage +
-      domainComponent * weights.domain +
-      retentionComponent * weights.retention +
-      discursiveComponent * weights.discursive +
-      riskComponent * weights.risk
-  );
+  let availableBase = baseWeights.coverage;
+  if (domainComponent !== null) availableBase += baseWeights.domain;
+  if (retentionComponent !== null) availableBase += baseWeights.retention;
+  if (discursiveComponent !== null) availableBase += baseWeights.discursive;
+
+  const weights = {
+    coverage: Math.round((baseWeights.coverage / availableBase) * 100) / 100,
+    domain: domainComponent !== null ? Math.round((baseWeights.domain / availableBase) * 100) / 100 : 0,
+    retention: retentionComponent !== null ? Math.round((baseWeights.retention / availableBase) * 100) / 100 : 0,
+    discursive: discursiveComponent !== null ? Math.round((baseWeights.discursive / availableBase) * 100) / 100 : 0,
+  };
+
+  const weightedSum =
+    coverageComponent * baseWeights.coverage +
+    (domainComponent ?? 0) * (domainComponent !== null ? baseWeights.domain : 0) +
+    (retentionComponent ?? 0) * (retentionComponent !== null ? baseWeights.retention : 0) +
+    (discursiveComponent ?? 0) * (discursiveComponent !== null ? baseWeights.discursive : 0);
+
+  const rawWeightedScore = availableBase > 0 ? weightedSum / availableBase : 0;
+
+  // Risk Penalty (Section 7)
+  const highAtRisk = atRiskTopics.filter((t) => t.priority === 'HIGH').length;
+  const mediumAtRisk = atRiskTopics.filter((t) => t.priority === 'MEDIUM').length;
+  const lowAtRisk = atRiskTopics.filter((t) => t.priority === 'LOW').length;
+  const riskPenalty = Math.min(20, highAtRisk * 5 + mediumAtRisk * 3 + lowAtRisk * 1);
+
+  const overallProgress = Math.min(100, Math.max(0, Math.round(rawWeightedScore - riskPenalty)));
+
+  // Preparation Confidence (Section 9)
+  let preparationConfidence: 'NO_DATA' | 'LOW' | 'MEDIUM' | 'HIGH';
+  const hasAnyQuestions = totalQuestions > 0;
+  const hasAnyReviews = reviewsCount > 0;
+  const hasAnyDiscursive = Boolean(discursiveSessions && discursiveSessions.length > 0);
+
+  if (!hasAnyQuestions && !hasAnyReviews && !hasAnyDiscursive) {
+    preparationConfidence = 'NO_DATA';
+  } else if (totalQuestions < 50) {
+    preparationConfidence = 'LOW';
+  } else if (totalQuestions < 200 || !hasAnyDiscursive) {
+    preparationConfidence = 'MEDIUM';
+  } else {
+    preparationConfidence = 'HIGH';
+  }
 
   return {
-    overallIndex: Math.min(100, Math.max(0, overallIndex)),
-    editalCoveragePercent,
+    overallIndex: overallProgress,
+    overallProgress,
+    coveragePercent,
+    meaningfulCoveragePercent,
+    editalCoveragePercent: coveragePercent,
     p1CoveragePercent,
     p2CoveragePercent,
-    averageDomainScore,
-    retentionRate: retention,
-    discursiveSessionsCount,
+    averageDomainScore: domainComponent,
+    domainScore: domainComponent,
+    retentionRate: retentionComponent,
+    discursiveSessionsCount: discursiveSessions ? discursiveSessions.length : 0,
+    discursiveReadiness: discursiveComponent,
+    preparationConfidence,
+    riskPenalty,
     atRiskTopicsCount: atRiskCount,
     masteredTopicsCount: masteredCount,
     breakdown: {
@@ -301,7 +375,7 @@ export function calculateAcademicProgress(
       domainComponent,
       retentionComponent,
       discursiveComponent,
-      riskComponent,
+      riskPenalty,
     },
     weights,
   };

@@ -1,7 +1,9 @@
 import { Achievement } from './types';
 import { AppStoreData } from '@/lib/data/store';
 import { getAllMeaningfulStudyDates, calculateWeeklyConsistency } from './streak';
-import { getLocalDateString } from '@/lib/utils/date';
+import { getLocalDateString, getCalendarDaysDiff } from '@/lib/utils/date';
+import { qualifiesForWeeklyBoss } from './mock-exam';
+import { calculateJourneyPhase } from './journey';
 
 export const ALL_ACHIEVEMENTS: Achievement[] = [
   {
@@ -196,10 +198,26 @@ export function evaluateAchievements(
   const todayStr = getLocalDateString();
   const weeklyRhythm = calculateWeeklyConsistency(meaningfulDates, todayStr, 6);
 
-  // Check mock exams or checkpoints
-  const completedCheckpointsCount = (store.mockExams || []).filter(
-    (me) => me.type === 'WEEKLY_CHECKPOINT' || me.type === 'FULL_MOCK'
-  ).length;
+  // Check weekly boss defeat using qualifiesForWeeklyBoss
+  const phaseInfo = calculateJourneyPhase({
+    daysUntilExam: getCalendarDaysDiff(todayStr, '2027-01-17'),
+    totalTopics: store.topics.length,
+    startedTopics: store.topics.filter((t) => t.status !== 'NOT_STARTED').length,
+    masteredTopics: store.topics.filter((t) => t.status === 'MASTERED').length,
+    atRiskTopics: store.topics.filter((t) => t.status === 'AT_RISK').length,
+    p1StartedTopics: store.topics.filter((t) => t.exam_block_code === 'P1' && t.status !== 'NOT_STARTED').length,
+    p1TotalTopics: store.topics.filter((t) => t.exam_block_code === 'P1').length,
+    p2StartedTopics: store.topics.filter((t) => t.exam_block_code === 'P2' && t.status !== 'NOT_STARTED').length,
+    p2TotalTopics: store.topics.filter((t) => t.exam_block_code === 'P2').length,
+    averageDomainScore: 0,
+    totalQuestions,
+    discursiveSessionsCount: discursiveSessions.length,
+    mockExamsCount: (store.mockExams || []).length,
+  });
+
+  const hasDefeatedBoss = (store.mockExams || []).some((me) =>
+    qualifiesForWeeklyBoss(me, phaseInfo.weeklyBossRecommendation)
+  );
 
   // Criteria evaluator map
   const criteriaMap: Record<string, () => boolean> = {
@@ -218,7 +236,7 @@ export function evaluateAchievements(
     coverage_75: () => coveragePercent >= 75,
     coverage_100: () => startedTopicsCount === totalTopics && totalTopics > 0,
     weekly_consistency: () => weeklyRhythm.daysStudiedThisWeek >= 6,
-    boss_defeated: () => completedCheckpointsCount >= 1,
+    boss_defeated: () => hasDefeatedBoss,
   };
 
   for (const ach of ALL_ACHIEVEMENTS) {

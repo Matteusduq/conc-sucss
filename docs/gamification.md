@@ -100,11 +100,11 @@ Para impedir abusos (como recarregar páginas, cliques artificiais ou repetiçõ
 ## 5. Dia de Estudo Significativo e Ritmo Semanal
 
 A sequência (streak) não recompensa abrir o app ou efetuar login. Um dia é considerado significativo (`isMeaningfulStudyDay`) apenas quando contém pelo menos UMA atividade pedagógica substancial:
-1. Sessão de questões com >= 10 itens;
-2. Estudo de material teórico >= 20 minutos OU material concluído no dia;
-3. >= 10 revisões FSRS devidas realizadas;
-4. 1 treino discursivo P3 registrado;
-5. 1 simulado ou checkpoint registrado.
+1. Sessão de questões com >= 10 itens no dia;
+2. Estudo de material teórico >= 20 minutos no dia via `StudySession` OU material concluído na data;
+3. >= 10 revisões FSRS devidas no dia (`was_due_at_review !== false`);
+4. 1 treino discursivo P3 registrado na data;
+5. 1 simulado ou checkpoint registrado na data.
 
 ### Ritmo da Semana
 - Meta configurável (padrão: 6 dias significativos por semana).
@@ -116,48 +116,73 @@ A sequência (streak) não recompensa abrir o app ou efetuar login. Um dia é co
 ## 6. Missões Diárias Estáveis e Automáticas
 
 As missões do dia são geradas e fixadas na data (`store.dailyMissions[date]`):
-1. **Missão Principal:** Nasce invariavelmente da Task #1 do plano estratégico (`generateDailyPlan().tasks[0]`). Exibe o bloco (P1/P2), disciplina, StudyScore, tempo sugerido e os fatores estratégicos reais do edital.
-2. **Missões de Apoio:** Adaptam-se ao tempo diário disponível (`today_available_minutes`):
-   - `<= 45 min`: Missão Principal + Memória/Questões rápidas.
-   - `46–90 min`: Principal + Consolidação + Memória FSRS.
-   - `91–150 min`: Principal + Questões + Memória + Recuperação de Erros.
-   - `> 150 min`: Inclui treino discursivo P3.
-3. **Progresso Automático:** Não há botão arbitrário de "Marcar como concluído". O progresso é derivado em tempo real das ações registradas (`QuestionSession`, `FlashcardReview`, `MaterialProgress`, `DiscursiveSession`, `ErrorLog`, `MockExam`).
+1. **Missão Principal:** Nasce invariavelmente da Task #1 do plano estratégico (`generateDailyPlan().tasks[0]`).
+   - Se o material obrigatório estiver pendente (`PENDING`), o motor transita para `WAITING_MATERIAL` e **não recomenda questões como substituto de teoria**.
+   - Se houver tópicos elegíveis com material disponível ou em consolidação/revisão, o sistema prioriza esses conteúdos para a missão executável.
+   - Se nenhum tópico possuir material e não houver histórico de estudo, o sistema exibe: *"Sua trilha estratégica já está definida. Os materiais ainda estão sendo preparados."* sem inventar missões artificiais.
+2. **Missão de Memória FSRS:**
+   - Só é gerada se `dueCards.length > 0`.
+   - Meta calibrada: `target = min(25, dueCards.length)`.
+   - Se não houver cartões devidos, nenhuma missão de memória é criada.
+3. **Agenda Semanal P3 (Prova Discursiva):**
+   - Respeita `phaseInfo.discursiveWeeklyTarget` (1x/sem na Base, 2x/sem na Consolidação e Exam Mode).
+   - Não é gerada todo dia só por ter minutos disponíveis.
+   - Disponível para candidatos com `>= 60 min` diários em dias apropriados.
+   - Alternância de formato: Questão de até 20 linhas (Q20) e Peça Técnica de até 50 linhas.
+4. **Progresso Automático:** Não há botão arbitrário de "Marcar como concluído". O progresso é derivado em tempo real de eventos reais (`QuestionSession`, `FlashcardReview` devidos, `StudySession`, `DiscursiveSession`, `ErrorLog`, `MockExam`).
 
 ---
 
 ## 7. Boss da Semana e Simulado Cebraspe (`MockExam`)
 
 O Boss da Semana é um checkpoint estruturado que o candidato executa no TEC Concursos ou em simulados oficiais:
-- A pontuação obedece estritamente às regras do Edital nº 1/2026:
-  - `P1_net = P1_certas - P1_erradas`
-  - `P2_net = P2_certas - P2_erradas`
-  - `Total_net = P1_net + P2_net`
-- Verificação automática dos cortes eliminatórios:
-  - `P1 >= 18`
-  - `P2 >= 27`
-  - `Total >= 54`
-- Feedback transparente: o sistema indica claramente se o desempenho está *"Acima do mínimo eliminatório do edital"* ou *"Abaixo do mínimo eliminatório do edital"*, nunca afirmando que "você seria aprovado", pois a nota de corte final é competitiva.
+- Validação estrita por `qualifiesForWeeklyBoss(mock, recommendation)`:
+  - Checkpoint da Fase: exige volume mínimo de itens totais, P1 e P2.
+  - `FULL_MOCK`: exige **exatamente 90 itens em P1 e 90 itens em P2 (180 itens total)**.
+  - `PARTIAL_MOCK`: aceita volume variável para ritmo, concedendo +60 XP apenas se `>= 30 itens`.
+- Feedback transparente: se o simulado registrado não atingir as metas da fase, o sistema exibe: *"Simulado registrado, mas não completou o Checkpoint Semanal. Faltaram X itens de P1 e Y itens de P2"*, e não marca o Boss como derrotado.
 
 ---
 
-## 8. Progresso Acadêmico vs. XP
+## 8. Progresso Acadêmico Real vs. XP
 
 A interface separa visualmente:
-- **XP / Level:** Esforço, frequência e adesão à rotina.
-- **Progresso Acadêmico / Índice de Preparação (0 a 100%):** Maturidade curricular calculada por:
-  - Cobertura do Edital (peso 35%): tópicos iniciados / 76
-  - Domínio Médio (peso 30%): média dos `domain_score`
-  - Retenção FSRS (peso 15%): taxa de acerto nas revisões
-  - Prática P3 (peso 10%): treinos discursivos acumulados
-  - Controle de Risco (peso 10%): penalidade por tópicos `AT_RISK`
+- **XP / Level:** Esforço, consistência e volume de estudo.
+- **Índice de Preparação Acadêmica (0 a 100%):** Maturidade curricular sem dados substitutos inventados:
+  - **Pesos Base Dinâmicos:**
+    - Cobertura Significativa: 35%
+    - Domínio Médio: 35%
+    - Retenção FSRS: 15%
+    - Prontidão P3: 15%
+  - **Redistribuição Proporcional:** Se não houver dados de retenção, domínio ou P3, o componente é `null` (exibido na UI como `—` / *"Sem dados suficientes"*) e os pesos restantes são redistribuídos.
+  - **Usuário Zerado:** Índice = 0%, Confiança = `NO_DATA`. Nunca exibe 24% fictício.
+  - **Risco como Penalidade:** O status `AT_RISK` atua como penalidade deduzida ao final (`highAtRisk * 5 + mediumAtRisk * 3 + lowAtRisk * 1`, teto de 20 pontos), e nunca como bônus por ausência de dados.
+  - **Prontidão P3:** Avaliada pelo desempenho real normalizado (70% qualidade dos treinos + 30% volume recente de treinos válidos).
+  - **Nível de Confiança:** `NO_DATA`, `LOW`, `MEDIUM`, `HIGH`, documentando a densidade amostral da preparação.
 
 ---
 
-## 9. Arquitetura de Armazenamento e Preparação para Supabase
+## 9. Bootstrap Pedagógico (Starter Mode)
 
-- **Migração Segura V2 → V3:** `STORAGE_KEY_V3 = 'camara_estudos_store_v3'`, `STORE_VERSION = 3`. Todos os dados de sessões, tópicos, edital (182 itens) e histórico são integralmente preservados.
-- **Preparação para Supabase:**
-  - `xp_transactions`: Pronta para tabela `xp_transactions` com constraint `UNIQUE (source_event_id, rule_id)`.
-  - `daily_missions`: Pronta para tabela `daily_missions` com chave estrangeira para `topics`.
-  - `mock_exams`: Pronta para tabela `mock_exams` com colunas `p1_net`, `p2_net`, `net_points`.
+Para usuários iniciando a preparação do zero (`meaningfulCoveragePercent < 10%` e sem histórico de desempenho), o Cockpit adota uma sequência deliberada de bootstrap:
+- **Rank 1:** P2 — Linguística: Leitura, compreensão, coesão, coerência e inferência (`top-p2-ling-3`)
+- **Rank 2:** P1 — Português: Interpretação, compreensão, tipos e gêneros textuais (`top-p1-port-1`)
+- **Rank 3:** P2 — Processo Legislativo: Procedimentos legislativos e etapas (`top-p2-leg-1`)
+- **Rank 4:** P1 — Constitucional/RICD: Poder Legislativo — Congresso, Câmara, Senado, competências (`top-p1-const-5`)
+- **Rank 5:** P2 — Linguística: Produção textual, recursos estilísticos e adequação (`top-p2-ling-5`)
+- **Rank 6:** P2 — Reconhecimento de Fala e IA: ASR e fundamentos (`top-p2-asr-1`)
+- **Rank 7:** P1 — Administrativo: Lei 14.133 — fundamentos, modalidades e contratação direta (`top-p1-adm-10`)
+- **Rank 8:** P1 — TI: Inteligência Artificial e engenharia de prompts (`top-p1-ti-5`)
+
+Assim que o aluno realiza sessões e avança a cobertura, o `StudyScore` e o motor adaptativo assumem a dinâmica completa da fila.
+
+---
+
+## 10. Arquitetura de Armazenamento e Preparação para Supabase
+
+- **Sessões Reais via `StudySession`:**
+  - Cada bloco de leitura teórico é registrado como `StudySession` com `started_at`, `ended_at`, `duration_seconds`.
+  - Impede que minutos de ontem vazem para a meta do dia corrente.
+  - Concede 30 XP por sessão real >= 20 min (teto 60 XP/dia) com idempotência por ID de sessão (`MATERIAL_SESSION_${session.id}`).
+- **Migração Segura V2 → V3:** `STORAGE_KEY_V3 = 'camara_estudos_store_v3'`, `STORE_VERSION = 3`. Todos os 182 SyllabusItems, 76 Topics, parâmetros oficiais Cebraspe e histórico são integralmente preservados.
+

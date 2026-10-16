@@ -156,3 +156,76 @@ export function buildMockExamRecord(
     created_at: new Date().toISOString(),
   };
 }
+
+export interface WeeklyBossQualificationResult {
+  qualifies: boolean;
+  missingP1: number;
+  missingP2: number;
+  missingTotal: number;
+  reason?: string;
+}
+
+/**
+ * Detailed evaluation of whether a given mock exam qualifies to defeat the Weekly Boss of a journey phase.
+ */
+export function evaluateWeeklyBossQualification(
+  mock: MockExam,
+  bossRecommendation: {
+    targetQuestions: number;
+    p1Target: number;
+    p2Target: number;
+  }
+): WeeklyBossQualificationResult {
+  const p1Total = (mock.p1_correct ?? 0) + (mock.p1_wrong ?? 0) + (mock.p1_blank ?? 0);
+  const p2Total = (mock.p2_correct ?? 0) + (mock.p2_wrong ?? 0) + (mock.p2_blank ?? 0);
+  const total = mock.total_questions || (p1Total + p2Total);
+
+  if (mock.type === 'FULL_MOCK') {
+    const missingP1 = Math.max(0, 90 - p1Total);
+    const missingP2 = Math.max(0, 90 - p2Total);
+    const missingTotal = Math.max(0, 180 - total);
+    const qualifies = p1Total === 90 && p2Total === 90 && total === 180;
+    return {
+      qualifies,
+      missingP1,
+      missingP2,
+      missingTotal,
+      reason: qualifies
+        ? undefined
+        : `Simulado registrado, mas não completou o Checkpoint Semanal. Faltaram ${missingP1} itens de P1 e ${missingP2} itens de P2.`,
+    };
+  }
+
+  const missingP1 = Math.max(0, bossRecommendation.p1Target - p1Total);
+  const missingP2 = Math.max(0, bossRecommendation.p2Target - p2Total);
+  const missingTotal = Math.max(0, bossRecommendation.targetQuestions - total);
+  const qualifies = missingP1 === 0 && missingP2 === 0 && missingTotal === 0;
+
+  return {
+    qualifies,
+    missingP1,
+    missingP2,
+    missingTotal,
+    reason: qualifies
+      ? undefined
+      : `Simulado registrado, mas não completou o Checkpoint Semanal. Faltaram ${missingP1} itens de P1 e ${missingP2} itens de P2.`,
+  };
+}
+
+/**
+ * Validates whether a given mock exam qualifies to defeat the Weekly Boss of a journey phase.
+ * Rules:
+ * - FULL_MOCK must have exactly 90 P1 items and 90 P2 items (total 180).
+ * - WEEKLY_CHECKPOINT / PARTIAL_MOCK must meet or exceed phase target: total_questions, p1Target, and p2Target.
+ */
+export function qualifiesForWeeklyBoss(
+  mock: MockExam,
+  bossRecommendation: {
+    targetQuestions: number;
+    p1Target: number;
+    p2Target: number;
+  }
+): boolean {
+  return evaluateWeeklyBossQualification(mock, bossRecommendation).qualifies;
+}
+

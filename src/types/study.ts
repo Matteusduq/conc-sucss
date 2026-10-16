@@ -51,7 +51,7 @@ export interface TodayTask {
   examBlockCode?: 'P1' | 'P2';
   priority: Priority;
   recommendedMaterialType: RecommendedMaterialType;
-  actionType: 'READ_MATERIAL' | 'TEC_QUESTIONS' | 'REVIEW_ERRORS' | 'MEMORY_REVIEW';
+  actionType: 'READ_MATERIAL' | 'TEC_QUESTIONS' | 'REVIEW_ERRORS' | 'MEMORY_REVIEW' | 'WAITING_MATERIAL';
   actionLabel: string;
   reason: string;
   estimatedMinutes: number;

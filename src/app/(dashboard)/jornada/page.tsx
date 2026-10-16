@@ -10,8 +10,9 @@ import { AchievementGrid } from '@/components/gamification/AchievementGrid';
 import { calculateJourneyPhase, calculateAcademicProgress } from '@/lib/gamification/journey';
 import { getOrCreateDailyMissions } from '@/lib/gamification/missions';
 import { calculateWeeklyConsistency, getAllMeaningfulStudyDates } from '@/lib/gamification/streak';
+import { qualifiesForWeeklyBoss, evaluateWeeklyBossQualification } from '@/lib/gamification/mock-exam';
 import { getLocalDateString, getDaysUntilExam } from '@/lib/utils/date';
-import { Layers, ShieldCheck, Trophy, Sparkles } from 'lucide-react';
+import { ShieldCheck } from 'lucide-react';
 
 export default function JornadaPage() {
   const { store, openMockModal } = useModal();
@@ -80,11 +81,32 @@ export default function JornadaPage() {
     store.settings?.gamification_weekly_target_days || 6
   );
 
-  // Check if Weekly Boss was completed in current week
-  const isBossCompletedThisWeek = mockExams.some((m) => {
+  // Check if Weekly Boss was completed in current week with real qualification
+  const mocksThisWeek = mockExams.filter((m) => {
     const mDate = getLocalDateString(m.performed_at);
     return mDate >= weeklyRhythm.weekStart && mDate <= weeklyRhythm.weekEnd;
   });
+  const qualifyingBossMock = mocksThisWeek.find((m) =>
+    qualifiesForWeeklyBoss(m, phaseInfo.weeklyBossRecommendation)
+  );
+  const isBossCompletedThisWeek = Boolean(qualifyingBossMock);
+
+  let unmetBossMockReason: string | undefined;
+  if (!isBossCompletedThisWeek && mocksThisWeek.length > 0) {
+    const latestUnmet = mocksThisWeek[mocksThisWeek.length - 1];
+    unmetBossMockReason = evaluateWeeklyBossQualification(
+      latestUnmet,
+      phaseInfo.weeklyBossRecommendation
+    ).reason;
+  }
+
+  const confidenceLabels: Record<string, string> = {
+    NO_DATA: 'Sem dados',
+    LOW: 'Baixa',
+    MEDIUM: 'Média',
+    HIGH: 'Alta',
+  };
+  const confidenceText = confidenceLabels[academicProgress.preparationConfidence] || 'Sem dados';
 
   const profile = store.gamificationProfile || {
     total_xp: 0,
@@ -137,7 +159,9 @@ export default function JornadaPage() {
             <div className="text-lg font-black text-emerald-400 font-mono mt-0.5">
               {academicProgress.overallIndex}%
             </div>
-            <div className="text-[10px] text-zinc-400 mt-0.5">Composição ponderada</div>
+            <div className="text-[10px] text-zinc-400 mt-0.5 font-medium">
+              Confiança: <span className="text-zinc-200">{confidenceText}</span>
+            </div>
           </div>
 
           <div className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800">
@@ -151,25 +175,35 @@ export default function JornadaPage() {
           <div className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800">
             <div className="text-[10px] text-zinc-400 uppercase font-semibold">Domínio Médio</div>
             <div className="text-lg font-black text-blue-400 font-mono mt-0.5">
-              {academicProgress.averageDomainScore} pts
+              {academicProgress.domainScore !== null ? `${academicProgress.domainScore} pts` : '—'}
             </div>
-            <div className="text-[10px] text-zinc-400 mt-0.5">Tópicos com questões</div>
+            <div className="text-[10px] text-zinc-400 mt-0.5">
+              {academicProgress.domainScore !== null ? 'Tópicos com questões' : 'Sem dados suficientes'}
+            </div>
           </div>
 
           <div className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800">
             <div className="text-[10px] text-zinc-400 uppercase font-semibold">Retenção FSRS</div>
             <div className="text-lg font-black text-purple-400 font-mono mt-0.5">
-              {academicProgress.retentionRate}%
+              {academicProgress.retentionRate !== null ? `${academicProgress.retentionRate}%` : '—'}
             </div>
-            <div className="text-[10px] text-zinc-400 mt-0.5">Memória espaçada</div>
+            <div className="text-[10px] text-zinc-400 mt-0.5">
+              {academicProgress.retentionRate !== null ? 'Memória espaçada' : 'Sem revisões suficientes'}
+            </div>
           </div>
 
           <div className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800 col-span-2 sm:col-span-1">
-            <div className="text-[10px] text-zinc-400 uppercase font-semibold">Treinos P3</div>
+            <div className="text-[10px] text-zinc-400 uppercase font-semibold">Prontidão P3</div>
             <div className="text-lg font-black text-amber-400 font-mono mt-0.5">
-              {academicProgress.discursiveSessionsCount}
+              {academicProgress.discursiveReadiness !== null
+                ? `${academicProgress.discursiveReadiness}%`
+                : '—'}
             </div>
-            <div className="text-[10px] text-zinc-400 mt-0.5">Q20 e Peças Técnicas</div>
+            <div className="text-[10px] text-zinc-400 mt-0.5">
+              {academicProgress.discursiveSessionsCount > 0
+                ? `${academicProgress.discursiveSessionsCount} treinos válidos`
+                : 'Sem treinos discursivos'}
+            </div>
           </div>
         </div>
       </div>
@@ -181,6 +215,7 @@ export default function JornadaPage() {
       <WeeklyBoss
         phaseInfo={phaseInfo}
         isCompletedThisWeek={isBossCompletedThisWeek}
+        unmetBossMockReason={unmetBossMockReason}
         onOpenRecordModal={openMockModal}
       />
 

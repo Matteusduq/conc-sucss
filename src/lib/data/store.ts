@@ -18,6 +18,8 @@ import {
   MockExam,
   MaterialProgress,
   StudyEvent,
+  StudySession,
+  SessionType,
   Priority,
   RecommendedMaterialType,
 } from '@/types/database';
@@ -70,6 +72,7 @@ export interface AppStoreData {
   fsrsStates: Record<string, FlashcardFsrsState>;
   reviews: FlashcardReview[];
   discursiveSessions: DiscursiveSession[];
+  studySessions: StudySession[];
   settings: UserStudySettings;
   mockExams: MockExam[];
   events: StudyEvent[];
@@ -116,6 +119,7 @@ export function getDefaultStore(): AppStoreData {
     fsrsStates: {},
     reviews: [],
     discursiveSessions: [],
+    studySessions: [],
     settings: {
       user_id: 'local-user',
       default_high_questions: 30,
@@ -347,6 +351,7 @@ export function migrateV1ToV2(v1Data: Partial<AppStoreData>): AppStoreData {
     fsrsStates: v1Data.fsrsStates || {},
     reviews: v1Data.reviews || [],
     discursiveSessions: v1Data.discursiveSessions || [],
+    studySessions: v1Data.studySessions || [],
     settings: {
       ...defaultStore.settings,
       ...(v1Data.settings || {}),
@@ -383,6 +388,7 @@ export function migrateV2ToV3(v2Data: Partial<AppStoreData>): AppStoreData {
     fsrsStates: v2Data.fsrsStates || {},
     reviews: v2Data.reviews || [],
     discursiveSessions: v2Data.discursiveSessions || [],
+    studySessions: v2Data.studySessions || [],
     settings: {
       ...defaultStore.settings,
       ...(v2Data.settings || {}),
@@ -428,6 +434,9 @@ export function loadStore(): AppStoreData {
       if (!data.discursiveSessions) {
         data.discursiveSessions = [];
       }
+      if (!data.studySessions) {
+        data.studySessions = [];
+      }
       if (!data.mockExams) {
         data.mockExams = [];
       }
@@ -436,6 +445,15 @@ export function loadStore(): AppStoreData {
         const missingTopics = SEED_TOPICS.filter((t) => !existingIds.has(t.id));
         data.topics = [...data.topics, ...missingTopics];
       }
+      // Synchronize starter_rank from SEED_TOPICS if missing in loaded store
+      const seedTopicMap = new Map(SEED_TOPICS.map((st) => [st.id, st]));
+      data.topics = data.topics.map((t) => {
+        const seedT = seedTopicMap.get(t.id);
+        if (seedT && seedT.starter_rank !== undefined && t.starter_rank === undefined) {
+          return { ...t, starter_rank: seedT.starter_rank };
+        }
+        return t;
+      });
       if (!data.topics || data.topics.some((t) => !t.study_score || t.study_score === 0)) {
         data = recalculateAllStudyScoresService(data);
       }
@@ -853,6 +871,8 @@ export function reviewFlashcardAction(
   const ratingStr =
     rating === Rating.Again ? 'AGAIN' : rating === Rating.Hard ? 'HARD' : rating === Rating.Good ? 'GOOD' : 'EASY';
 
+  const wasDueAtReview = new Date(currentFsrs.due).getTime() <= Date.now();
+
   const newReview: FlashcardReview = {
     id: `rev-${Date.now()}`,
     user_id: card.user_id,
@@ -863,6 +883,7 @@ export function reviewFlashcardAction(
     state_before: { ...currentFsrs },
     state_after: { ...updatedFsrsState },
     fsrs_log: { ...record.log },
+    was_due_at_review: wasDueAtReview,
     created_at: new Date().toISOString(),
   };
 
@@ -1134,6 +1155,47 @@ export function updateTopicPriorityAction(
   const recalculatedStore = recalculateTopicDomainService(topicId, nextStore);
   saveStore(recalculatedStore);
   return recalculatedStore;
+}
+
+// -------------------------------------------------------------
+// StudySession Action (for real study session logging & daily capping)
+// -------------------------------------------------------------
+
+export function recordStudySessionAction(
+  sessionData: {
+    user_id: string;
+    session_type: SessionType;
+    started_at: string;
+    ended_at: string;
+    duration_seconds: number;
+    exam_id?: string;
+    subject_id?: string;
+    topic_id?: string | null;
+    material_id?: string | null;
+    notes?: string | null;
+  },
+  store: AppStoreData
+): { store: AppStoreData; session: StudySession } {
+  const sessionId = `sess-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const newSession: StudySession = {
+    exam_id: sessionData.exam_id || 'cd-2026',
+    subject_id: sessionData.subject_id || '',
+    topic_id: sessionData.topic_id ?? null,
+    material_id: sessionData.material_id ?? null,
+    notes: sessionData.notes ?? null,
+    ...sessionData,
+    id: sessionId,
+    created_at: new Date().toISOString(),
+  };
+
+  const nextStore: AppStoreData = {
+    ...store,
+    studySessions: [newSession, ...(store.studySessions || [])],
+  };
+
+  const { store: gamified } = processGamification(nextStore);
+  saveStore(gamified);
+  return { store: gamified, session: newSession };
 }
 
 export function getDueFlashcards(store: AppStoreData, now: Date = new Date()): CardWithMetadata[] {

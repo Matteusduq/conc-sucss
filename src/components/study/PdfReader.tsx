@@ -9,9 +9,7 @@ import {
   Maximize2,
   Bookmark,
   CheckCircle,
-  FileText,
   Clock,
-  ExternalLink,
   MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -98,23 +96,17 @@ export function PdfReader({
               {material.title}
             </h2>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onOpenTec}>
-              <ExternalLink className="w-4 h-4 mr-1.5" />
-              Praticar no TEC Concursos
-            </Button>
-          </div>
         </div>
 
         {/* Empty State / Awaiting Material */}
         <div className="p-12 rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/60 text-center flex flex-col items-center justify-center space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400">
-            <FileText className="w-7 h-7" />
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <Clock className="w-7 h-7" />
           </div>
           <div className="space-y-1">
-            <h3 className="text-base font-semibold text-zinc-200">Aguardando material PDF</h3>
+            <h3 className="text-base font-semibold text-zinc-100">Material ainda não disponível.</h3>
             <p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed">
-              O edital e as diretrizes pedagógicas deste tópico já estão mapeados. O arquivo PDF correspondente será inserido via pipeline de importação ou Supabase Storage.
+              Este tópico já está priorizado e será liberado assim que o PDF correspondente for inserido.
             </p>
           </div>
           <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 text-left text-xs max-w-md w-full space-y-2">
@@ -127,17 +119,9 @@ export function PdfReader({
               <span className="text-zinc-200 font-semibold">{topic.priority}</span>
             </div>
             <div className="flex justify-between text-zinc-400">
-              <span>Filtro no TEC:</span>
-              <span className="text-zinc-300 font-mono text-[11px] truncate max-w-[200px]">
-                {topic.tec_filter_hint || 'Não definido'}
-              </span>
+              <span>Diretriz pedagógica:</span>
+              <span className="text-zinc-300 font-medium">Teoria obrigatória antes de bateria de questões</span>
             </div>
-          </div>
-
-          <div className="pt-2 flex gap-3">
-            <Button onClick={onOpenTec}>
-              Ir direto para questões no TEC
-            </Button>
           </div>
         </div>
       </div>

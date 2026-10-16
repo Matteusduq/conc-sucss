@@ -160,6 +160,7 @@ export const P1_TI_TOPICS: Topic[] = [
     is_discursive_relevant: false,
     recommended_material_type: 'FULL_PDF',
     status: 'NOT_STARTED',
+    starter_rank: 8,
     display_order: 5,
     estimated_minutes: null,
     domain_score: null,

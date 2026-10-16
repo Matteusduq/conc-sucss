@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Swords, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { X, Swords, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { MockExamType } from '@/types/database';
 import { calculateMockExamScore } from '@/lib/gamification/mock-exam';
@@ -24,12 +24,12 @@ interface RecordMockModalProps {
 
 export function RecordMockModal({ isOpen, onClose, onSave }: RecordMockModalProps) {
   const [mockType, setMockType] = useState<MockExamType>('WEEKLY_CHECKPOINT');
-  const [p1Correct, setP1Correct] = useState<string>('25');
-  const [p1Wrong, setP1Wrong] = useState<string>('5');
+  const [p1Correct, setP1Correct] = useState<string>('15');
+  const [p1Wrong, setP1Wrong] = useState<string>('0');
   const [p1Blank, setP1Blank] = useState<string>('0');
 
-  const [p2Correct, setP2Correct] = useState<string>('30');
-  const [p2Wrong, setP2Wrong] = useState<string>('5');
+  const [p2Correct, setP2Correct] = useState<string>('15');
+  const [p2Wrong, setP2Wrong] = useState<string>('0');
   const [p2Blank, setP2Blank] = useState<string>('0');
 
   const [durationMinutes, setDurationMinutes] = useState<string>('60');
@@ -40,10 +40,14 @@ export function RecordMockModal({ isOpen, onClose, onSave }: RecordMockModalProp
   const p1C = parseInt(p1Correct, 10) || 0;
   const p1W = parseInt(p1Wrong, 10) || 0;
   const p1B = parseInt(p1Blank, 10) || 0;
+  const p1Total = p1C + p1W + p1B;
 
   const p2C = parseInt(p2Correct, 10) || 0;
   const p2W = parseInt(p2Wrong, 10) || 0;
   const p2B = parseInt(p2Blank, 10) || 0;
+  const p2Total = p2C + p2W + p2B;
+
+  const isFullMockValid = mockType !== 'FULL_MOCK' || (p1Total === 90 && p2Total === 90);
 
   const evalResult = calculateMockExamScore({
     p1_correct: p1C,
@@ -57,6 +61,7 @@ export function RecordMockModal({ isOpen, onClose, onSave }: RecordMockModalProp
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isFullMockValid) return;
     onSave({
       type: mockType,
       p1_correct: p1C,
@@ -109,9 +114,24 @@ export function RecordMockModal({ isOpen, onClose, onSave }: RecordMockModalProp
               className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-sm text-zinc-200 focus:outline-none focus:border-purple-500 font-medium"
             >
               <option value="WEEKLY_CHECKPOINT">Boss da Semana (Checkpoint Semanal)</option>
-              <option value="PARTIAL_MOCK">Simulado Parcial de Ritmo</option>
-              <option value="FULL_MOCK">Simulado Completo do Edital (180 itens)</option>
+              <option value="PARTIAL_MOCK">Simulado Parcial de Ritmo (Volume variável)</option>
+              <option value="FULL_MOCK">Simulado Completo do Edital (180 itens: 90 P1 + 90 P2)</option>
             </select>
+            {mockType === 'FULL_MOCK' && (
+              <div className="mt-2 p-2.5 rounded-lg bg-purple-950/30 border border-purple-800/40 text-xs text-purple-300">
+                <strong>Regra Full Mock:</strong> Exatamente 90 itens P1 + 90 itens P2 (180 itens no total).
+              </div>
+            )}
+            {mockType === 'WEEKLY_CHECKPOINT' && (
+              <div className="mt-2 p-2.5 rounded-lg bg-blue-950/30 border border-blue-800/40 text-xs text-blue-300">
+                <strong>Checkpoint Semanal:</strong> Valida o volume mínimo exigido para o Boss da fase atual.
+              </div>
+            )}
+            {mockType === 'PARTIAL_MOCK' && (
+              <div className="mt-2 p-2.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-400">
+                <strong>Simulado Parcial:</strong> Aceita volume livre de itens. Pontua +60 XP a partir de 30 itens.
+              </div>
+            )}
           </div>
 
           {/* Block P1 Inputs */}
@@ -286,6 +306,16 @@ export function RecordMockModal({ isOpen, onClose, onSave }: RecordMockModalProp
             </div>
           </div>
 
+          {/* Full Mock Validation Banner */}
+          {mockType === 'FULL_MOCK' && !isFullMockValid && (
+            <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800/60 text-xs text-rose-300 flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+              <div>
+                <strong>Simulado Completo Incompleto:</strong> O edital exige exatamente 90 itens em P1 e 90 em P2 (180 no total). Registrado atualmente: P1 = {p1Total}, P2 = {p2Total}. Ajuste os campos para salvar como FULL_MOCK ou selecione outro tipo.
+              </div>
+            </div>
+          )}
+
           {/* Buttons */}
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
             <Button
@@ -298,9 +328,18 @@ export function RecordMockModal({ isOpen, onClose, onSave }: RecordMockModalProp
             </Button>
             <Button
               type="submit"
-              className="bg-purple-600 hover:bg-purple-500 text-white font-bold"
+              disabled={!isFullMockValid}
+              className={`font-bold transition-all ${
+                !isFullMockValid
+                  ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
+                  : 'bg-purple-600 hover:bg-purple-500 text-white'
+              }`}
             >
-              Salvar Resultado (+120 XP)
+              {mockType === 'FULL_MOCK'
+                ? 'Salvar Simulado Completo (+200 XP)'
+                : mockType === 'WEEKLY_CHECKPOINT'
+                ? 'Salvar Checkpoint Semanal (+120 XP)'
+                : 'Salvar Simulado Parcial'}
             </Button>
           </div>
         </form>

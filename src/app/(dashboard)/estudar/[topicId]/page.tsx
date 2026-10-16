@@ -5,10 +5,8 @@ import Link from 'next/link';
 import { useModal } from '@/components/layout/DashboardLayoutClient';
 import { PdfReader } from '@/components/study/PdfReader';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { PriorityBadge } from '@/components/study/PriorityBadge';
 import { StatusBadge } from '@/components/study/StatusBadge';
-import { DomainScore } from '@/components/study/DomainScore';
 import { ArrowLeft, Sparkles, ExternalLink, Brain } from 'lucide-react';
 import { updateMaterialProgressAction } from '@/lib/data/store';
 
@@ -31,6 +29,10 @@ export default function EstudarPage({ params }: { params: Promise<{ topicId: str
       </div>
     );
   }
+
+  const isTheoryPending =
+    (topic.status === 'NOT_STARTED' || topic.status === 'LEARNING') &&
+    (material.status === 'PENDING' || !material.storage_path);
 
   const handleUpdateProgress = (data: Record<string, unknown>) => {
     updateMaterialProgressAction(
@@ -109,10 +111,23 @@ export default function EstudarPage({ params }: { params: Promise<{ topicId: str
             Criar Flashcard
           </Button>
 
-          <Button size="sm" onClick={() => openTecModal(topic.id)}>
-            <ExternalLink className="w-3.5 h-3.5 mr-1" />
-            Treinar no TEC
-          </Button>
+          {isTheoryPending ? (
+            <Button
+              size="sm"
+              disabled
+              variant="outline"
+              className="opacity-50 cursor-not-allowed text-zinc-500 border-zinc-800"
+              title="Aguardando material: a leitura teórica é obrigatória antes de resolver questões"
+            >
+              <ExternalLink className="w-3.5 h-3.5 mr-1" />
+              Treinar no TEC
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => openTecModal(topic.id)}>
+              <ExternalLink className="w-3.5 h-3.5 mr-1" />
+              Treinar no TEC
+            </Button>
+          )}
         </div>
       </div>
 

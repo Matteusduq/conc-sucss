@@ -12,15 +12,58 @@ export interface PlannerContext {
   weeklyTargetMinutes?: number;
 }
 
+export function isStarterMode(topics: Topic[]): boolean {
+  const total = topics.length || 76;
+  const meaningfulCount = topics.filter((t) =>
+    ['AWAITING_QUESTIONS', 'CONSOLIDATING', 'MASTERED', 'MAINTENANCE', 'AT_RISK'].includes(t.status)
+  ).length;
+  const meaningfulCoverage = (meaningfulCount / total) * 100;
+  const hasPerformanceHistory = topics.some(
+    (t) => (t.domain_score !== null && t.domain_score !== undefined) || t.last_studied_at !== null
+  );
+  return meaningfulCoverage < 10 && !hasPerformanceHistory;
+}
+
+export function compareStarterTopics(a: Topic, b: Topic): number {
+  const rankA = a.starter_rank ?? 9999;
+  const rankB = b.starter_rank ?? 9999;
+  if (rankA !== rankB) {
+    return rankA - rankB;
+  }
+
+  // Priority (HIGH > MEDIUM > LOW)
+  const prioWeight = (p: Priority) => (p === 'HIGH' ? 3 : p === 'MEDIUM' ? 2 : 1);
+  const prioDiff = prioWeight(b.priority) - prioWeight(a.priority);
+  if (prioDiff !== 0) return prioDiff;
+
+  // Cross-relevance
+  const crossWeight = (c?: string | null) => (c === 'P1_P2_P3' ? 3 : c === 'P1_P2' || c === 'P2_P3' ? 2 : 1);
+  const crossDiff = crossWeight(b.cross_relevance) - crossWeight(a.cross_relevance);
+  if (crossDiff !== 0) return crossDiff;
+
+  // Discursive synergy
+  const discWeight = (t: Topic) =>
+    t.discursive_synergy === 'HIGH' ? 3 : t.discursive_synergy === 'MEDIUM' ? 2 : t.discursive_eligible ? 1 : 0;
+  const discDiff = discWeight(b) - discWeight(a);
+  if (discDiff !== 0) return discDiff;
+
+  // Exam block (P2 > P1)
+  const blockWeight = (code?: string | null) => (code === 'P2' ? 2 : code === 'P1' ? 1 : 0);
+  const blockDiff = blockWeight(b.exam_block_code) - blockWeight(a.exam_block_code);
+  if (blockDiff !== 0) return blockDiff;
+
+  // StudyScore
+  return (b.study_score || 0) - (a.study_score || 0);
+}
+
 /**
  * Orders topics for the daily study plan using strategic exam weighting,
  * risk priorities, and interleaved block balance (P2 and P1).
  *
  * Rules:
  * 1. Urgent topics (AT_RISK, AWAITING_QUESTIONS) are placed first, ordered by compareTopicsForQueue.
- * 2. Regular topics respect priority tiers (HIGH > MEDIUM > LOW).
- * 3. Within each priority tier, P2 and P1 are interleaved so that P2 gets the top recommendation
- *    (due to its strategic score boost) while P1 is never excluded or starved from daily study.
+ * 2. In starter mode (< 10% meaningful coverage and no performance history), deliberate bootstrap sequence dominates.
+ * 3. In regular mode, priority tiers (HIGH > MEDIUM > LOW) and P2/P1 interleaving apply.
  * 4. Deterministic tie-breaking via compareTopicsForQueue ensures no reliance on raw seed array order.
  */
 export function orderTopicsForDailyPlan(topics: Topic[]): Topic[] {
@@ -29,10 +72,16 @@ export function orderTopicsForDailyPlan(topics: Topic[]): Topic[] {
     .filter((t) => t.status === 'AT_RISK' || t.status === 'AWAITING_QUESTIONS')
     .sort(compareTopicsForQueue);
 
-  // 2. Non-urgent topics grouped by priority tier (HIGH > MEDIUM > LOW)
+  // 2. Non-urgent topics
   const nonUrgent = topics.filter(
     (t) => t.status !== 'AT_RISK' && t.status !== 'AWAITING_QUESTIONS'
   );
+
+  // If in starter mode (< 10% meaningful coverage, no performance history), use starter ranking
+  if (isStarterMode(topics)) {
+    const starterOrdered = [...nonUrgent].sort(compareStarterTopics);
+    return [...urgent, ...starterOrdered];
+  }
 
   const tiers: Priority[] = ['HIGH', 'MEDIUM', 'LOW'];
   const orderedNonUrgent: Topic[] = [];
@@ -154,9 +203,9 @@ export function generateDailyPlan(context: PlannerContext): TodayPlanSummary {
         actionLabel = topic.status === 'NOT_STARTED' ? 'Iniciar leitura do material' : 'Continuar leitura';
         reason = `Conteúdo ${topic.priority === 'HIGH' ? 'de altíssima relevância no edital' : 'previsto no edital'}.`;
       } else {
-        actionType = 'TEC_QUESTIONS';
-        actionLabel = 'Praticar no TEC Concursos';
-        reason = `Material PDF aguardando upload. Recomendado iniciar contato prévio via questões filtradas no TEC.`;
+        actionType = 'WAITING_MATERIAL';
+        actionLabel = 'Aguardando material didático';
+        reason = 'Material ainda não disponível. Este tópico já está priorizado e será liberado assim que o PDF correspondente for inserido.';
       }
     } else if (topic.status === 'CONSOLIDATING') {
       actionType = 'TEC_QUESTIONS';

@@ -2,25 +2,18 @@ import { describe, it, expect } from 'vitest';
 import {
   getDefaultStore,
   recordQuestionSessionAction,
-  recordErrorLogAction,
-  resolveErrorLogAction,
   reviewFlashcardAction,
   updateMaterialProgressAction,
   recordDiscursiveSessionAction,
   recordMockExamAction,
-  migrateV1ToV2,
+  recordStudySessionAction,
   migrateV2ToV3,
-  loadStore,
-  saveStore,
   AppStoreData,
-  STORAGE_KEY_V2,
-  STORAGE_KEY_V3,
 } from '@/lib/data/store';
 import {
   GAMIFICATION_RULES,
   getLevel,
   getLevelProgress,
-  XP_PER_LEVEL,
 } from '../xp';
 import {
   calculateJourneyPhase,
@@ -31,7 +24,6 @@ import {
   isMeaningfulStudyDay,
   calculateStreaks,
   calculateWeeklyConsistency,
-  getAllMeaningfulStudyDates,
 } from '../streak';
 import {
   generateDailyMissions,
@@ -41,11 +33,59 @@ import {
 import {
   calculateMockExamScore,
   buildMockExamRecord,
+  qualifiesForWeeklyBoss,
 } from '../mock-exam';
 import { processGamification } from '../engine';
-import { ALL_ACHIEVEMENTS, evaluateAchievements } from '../achievements';
+import { evaluateAchievements } from '../achievements';
 import { Rating } from 'ts-fsrs';
 import { generateDailyPlan } from '@/lib/study-engine/recommendations';
+import { DailyMission } from '../types';
+import { Flashcard, DiscursiveSession } from '@/types/database';
+
+function makeFlashcard(id: string, overrides: Partial<Flashcard> = {}): Flashcard {
+  return {
+    id,
+    user_id: 'local-user',
+    exam_id: 'cd-2026',
+    subject_id: 'p1-port',
+    topic_id: 'top-p1-port-1',
+    card_type: 'CONTENT',
+    front: 'Q',
+    back: 'A',
+    source_type: 'MANUAL',
+    source_material_id: null,
+    source_error_id: null,
+    exam_priority: 'HIGH',
+    priority_boost: 0,
+    active: true,
+    suspended: false,
+    created_at: '',
+    updated_at: '',
+    ...overrides,
+  };
+}
+
+function makeDiscursiveSession(id: string, calculated_score: number): DiscursiveSession {
+  return {
+    id,
+    user_id: 'local-user',
+    exam_id: 'exam-camara-2027',
+    type: 'QUESTION_20_LINES',
+    title: 'Tema Teste',
+    prompt_summary: 'Resumo prompt',
+    related_subject_id: null,
+    related_topic_id: null,
+    duration_seconds: 1800,
+    lines_written: 15,
+    content_score: 2,
+    language_errors: 0,
+    calculated_score,
+    notes: null,
+    performed_at: new Date().toISOString(),
+    created_at: '',
+    updated_at: '',
+  };
+}
 
 describe('FASE 2 — JORNADA GAMIFICADA E SISTEMA ADAPTATIVO (Testes Obrigatórios)', () => {
   // Test 1: XP não é concedido por abrir página
@@ -515,6 +555,10 @@ describe('FASE 2 — JORNADA GAMIFICADA E SISTEMA ADAPTATIVO (Testes Obrigatóri
   // Test 15: Missão diária é estável no mesmo dia
   it('15. Missão diária é estável e não se altera ao recarregar a mesma data', () => {
     const store = getDefaultStore();
+    // Provide available material for top starter topic so it has stable executable daily missions
+    store.materials = store.materials.map((m) =>
+      m.topic_id === 'top-p2-ling-3' ? { ...m, status: 'AVAILABLE', storage_path: '/p.pdf' } : m
+    );
     const today = '2026-10-15';
 
     const { missions: firstRun, store: store1 } = getOrCreateDailyMissions(today, store);
@@ -575,11 +619,17 @@ describe('FASE 2 — JORNADA GAMIFICADA E SISTEMA ADAPTATIVO (Testes Obrigatóri
   // Test 18: Mission completion deriva dos eventos reais
   it('18. Conclusão de missões deriva automaticamente dos eventos reais', () => {
     let store = getDefaultStore();
+    // Set first starter topic to AWAITING_QUESTIONS so it generates a QUESTIONS mission
+    store.topics = store.topics.map((t) =>
+      t.id === 'top-p2-ling-3' ? { ...t, status: 'AWAITING_QUESTIONS' } : t
+    );
+
     const today = '2026-10-15';
     const { missions } = getOrCreateDailyMissions(today, store);
 
     // Initial status should be PENDING
     expect(missions[0].status).toBe('PENDING');
+    expect(missions[0].type).toBe('QUESTIONS');
 
     // Simulate user completing questions matching mission 1
     const targetQ = missions[0].target_value;
@@ -587,8 +637,8 @@ describe('FASE 2 — JORNADA GAMIFICADA E SISTEMA ADAPTATIVO (Testes Obrigatóri
       {
         user_id: 'local-user',
         exam_id: 'exam-camara-2027',
-        subject_id: missions[0].subject_id || 'sub-p2-processo-legislativo',
-        topic_id: missions[0].topic_id || 'top-p2-leg-1',
+        subject_id: missions[0].subject_id || 'sub-linguistica',
+        topic_id: missions[0].topic_id || 'top-p2-ling-3',
         performed_at: `${today}T11:00:00-03:00`,
         total_questions: targetQ,
         correct: targetQ,
@@ -605,8 +655,8 @@ describe('FASE 2 — JORNADA GAMIFICADA E SISTEMA ADAPTATIVO (Testes Obrigatóri
       store
     );
 
-    // Recheck mission progress
-    const updatedMissions = updateMissionsProgress(missions, store, today);
+    // Recheck mission progress with (missions, today, store)
+    const updatedMissions = updateMissionsProgress(missions, today, store);
     expect(updatedMissions[0].current_value).toBeGreaterThanOrEqual(targetQ);
     expect(updatedMissions[0].status).toBe('COMPLETED');
   });
@@ -906,18 +956,540 @@ describe('FASE 2 — JORNADA GAMIFICADA E SISTEMA ADAPTATIVO (Testes Obrigatóri
     expect(p2).toHaveLength(34);
   });
 
-  // Test 30: Academic progress calculation is distinct from XP and documented
+  // Test 30: Academic progress calculation is distinct from XP and documented with dynamic weights
   it('30. Academic progress (Progresso da Preparação) calcula índice pedagógico real e distinto do XP', () => {
     const store = getDefaultStore();
     const result = calculateAcademicProgress(store.topics, store.discursiveSessions, null);
 
-    expect(result.overallIndex).toBeDefined();
-    expect(result.overallIndex).toBeGreaterThanOrEqual(0);
-    expect(result.overallIndex).toBeLessThanOrEqual(100);
-    expect(result.weights.coverage).toBe(0.35);
-    expect(result.weights.domain).toBe(0.30);
-    expect(result.weights.retention).toBe(0.15);
-    expect(result.weights.discursive).toBe(0.10);
-    expect(result.weights.risk).toBe(0.10);
+    expect(result.overallIndex).toBe(0);
+    expect(result.preparationConfidence).toBe('NO_DATA');
+    expect(result.domainScore).toBeNull();
+    expect(result.retentionRate).toBeNull();
+    expect(result.discursiveReadiness).toBeNull();
+    expect(result.weights.coverage).toBe(1); // Coverage is the only available component with 0% data
+    expect(result.riskPenalty).toBe(0);
   });
 });
+
+describe('PATCH 2.1 — Motor Adaptativo, Integridade Acadêmica e Bootstrap Pedagógico', () => {
+  // 1. Fluxo Teoria -> Questão
+  it('1. Fluxo Teoria: NOT_STARTED com material PENDING nunca gera TEC_QUESTIONS como missão', () => {
+    const store = getDefaultStore();
+    // In brand-new store, all materials are PENDING
+    const plan = generateDailyPlan({
+      topics: store.topics,
+      subjects: store.subjects,
+      materials: store.materials,
+      errors: store.errorLogs,
+      overdueCardsCount: 0,
+      availableMinutesToday: 120,
+    });
+
+    const waitingTasks = plan.tasks.filter((t) => t.actionType === 'WAITING_MATERIAL');
+    expect(waitingTasks.length).toBeGreaterThan(0);
+    plan.tasks.forEach((t) => {
+      expect(t.actionType).not.toBe('TEC_QUESTIONS');
+      expect(t.actionType).toBe('WAITING_MATERIAL');
+    });
+
+    // Daily missions should not produce an executable mission if everything is waiting
+    const { missions } = getOrCreateDailyMissions('2026-10-15', store);
+    const executableMissions = missions.filter((m) => m.is_executable !== false);
+    expect(executableMissions).toHaveLength(0);
+    expect(missions[0].description).toContain('Os materiais ainda estão sendo preparados');
+  });
+
+  it('2. Fluxo Teoria: NOT_STARTED com material AVAILABLE gera READ_MATERIAL; concluído gera AWAITING_QUESTIONS -> TEC', () => {
+    let store = getDefaultStore();
+    // Simulate top starter topic having available material
+    const topTopicId = 'top-p2-ling-3';
+    store.materials = store.materials.map((m) =>
+      m.topic_id === topTopicId ? { ...m, status: 'AVAILABLE', storage_path: '/materials/ling3.pdf' } : m
+    );
+
+    const plan = generateDailyPlan({
+      topics: store.topics,
+      subjects: store.subjects,
+      materials: store.materials,
+      errors: store.errorLogs,
+      overdueCardsCount: 0,
+      availableMinutesToday: 120,
+    });
+
+    const task1 = plan.tasks.find((t) => t.topicId === topTopicId);
+    expect(task1).toBeDefined();
+    expect(task1!.actionType).toBe('READ_MATERIAL');
+
+    // Conclude material
+    store = updateMaterialProgressAction(
+      {
+        material_id: store.materials.find((m) => m.topic_id === topTopicId)!.id,
+        topic_id: topTopicId,
+        user_id: 'local-user',
+        completed: true,
+        progress_percent: 100,
+      },
+      store
+    );
+
+    const updatedTopic = store.topics.find((t) => t.id === topTopicId);
+    expect(updatedTopic!.status).toBe('AWAITING_QUESTIONS');
+
+    const planAfterRead = generateDailyPlan({
+      topics: store.topics,
+      subjects: store.subjects,
+      materials: store.materials,
+      errors: store.errorLogs,
+      overdueCardsCount: 0,
+      availableMinutesToday: 120,
+    });
+    const taskAfterRead = planAfterRead.tasks.find((t) => t.topicId === topTopicId);
+    expect(taskAfterRead!.actionType).toBe('TEC_QUESTIONS');
+  });
+
+  // 2. Memória / Flashcards
+  it('3. Memória: zero cards ou zero due cards não geram missão MEMORY; due > 0 gera target = min(25, due)', () => {
+    const store = getDefaultStore();
+    expect(store.flashcards).toHaveLength(0);
+
+    const missionsZeroCards = generateDailyMissions('2026-10-15', store);
+    expect(missionsZeroCards.some((m) => m.type === 'MEMORY')).toBe(false);
+
+    // Add a card that is due in the future (not due today)
+    const futureStore: AppStoreData = {
+      ...store,
+      flashcards: [makeFlashcard('card-1')],
+      fsrsStates: {
+        'card-1': {
+          flashcard_id: 'card-1',
+          user_id: 'local-user',
+          due: new Date(Date.now() + 86400000).toISOString(),
+          stability: 2,
+          difficulty: 3,
+          elapsed_days: 0,
+          scheduled_days: 1,
+          learning_steps: 0,
+          reps: 1,
+          lapses: 0,
+          state: 1,
+          last_review: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      },
+    };
+
+    const missionsNotDue = generateDailyMissions('2026-10-15', futureStore);
+    expect(missionsNotDue.some((m) => m.type === 'MEMORY')).toBe(false);
+
+    // 8 due cards -> target 8
+    const store8Due: AppStoreData = {
+      ...store,
+      flashcards: Array.from({ length: 8 }, (_, i) => makeFlashcard(`c-${i}`)),
+      fsrsStates: Object.fromEntries(
+        Array.from({ length: 8 }, (_, i) => [
+          `c-${i}`,
+          {
+            flashcard_id: `c-${i}`,
+            user_id: 'local-user',
+            due: new Date(Date.now() - 1000).toISOString(),
+            stability: 2,
+            difficulty: 3,
+            elapsed_days: 0,
+            scheduled_days: 1,
+            learning_steps: 0,
+            reps: 1,
+            lapses: 0,
+            state: 1,
+            last_review: null,
+            updated_at: new Date().toISOString(),
+          },
+        ])
+      ),
+    };
+
+    const missions8 = generateDailyMissions('2026-10-15', store8Due);
+    const memory8 = missions8.find((m) => m.type === 'MEMORY');
+    expect(memory8).toBeDefined();
+    expect(memory8!.target_value).toBe(8);
+
+    // 40 due cards -> target clamped to 25
+    const store40Due: AppStoreData = {
+      ...store,
+      flashcards: Array.from({ length: 40 }, (_, i) => makeFlashcard(`c-${i}`)),
+      fsrsStates: Object.fromEntries(
+        Array.from({ length: 40 }, (_, i) => [
+          `c-${i}`,
+          {
+            flashcard_id: `c-${i}`,
+            user_id: 'local-user',
+            due: new Date(Date.now() - 1000).toISOString(),
+            stability: 2,
+            difficulty: 3,
+            elapsed_days: 0,
+            scheduled_days: 1,
+            learning_steps: 0,
+            reps: 1,
+            lapses: 0,
+            state: 1,
+            last_review: null,
+            updated_at: new Date().toISOString(),
+          },
+        ])
+      ),
+    };
+
+    const missions40 = generateDailyMissions('2026-10-15', store40Due);
+    const memory40 = missions40.find((m) => m.type === 'MEMORY');
+    expect(memory40).toBeDefined();
+    expect(memory40!.target_value).toBe(25);
+  });
+
+  // 3. Preparação Acadêmica
+  it('4. Preparação: store zerado = 0%, retention = null, sem bônus de risco, 4 P3 ruins não geram 100%', () => {
+    const store = getDefaultStore();
+    const freshProgress = calculateAcademicProgress(store.topics, [], null);
+
+    expect(freshProgress.overallIndex).toBe(0);
+    expect(freshProgress.preparationConfidence).toBe('NO_DATA');
+    expect(freshProgress.retentionRate).toBeNull();
+    expect(freshProgress.domainScore).toBeNull();
+    expect(freshProgress.riskPenalty).toBe(0);
+
+    // 4 poor P3 sessions (score 2.0 out of 15 for Q20)
+    const poorP3Sessions = [1, 2, 3, 4].map((i) => makeDiscursiveSession(`p3-${i}`, 2));
+
+    const progressWithP3 = calculateAcademicProgress(store.topics, poorP3Sessions, null);
+    expect(progressWithP3.discursiveReadiness).toBeDefined();
+    expect(progressWithP3.discursiveReadiness!).toBeLessThan(50);
+  });
+
+  // 4. Boss Semanal & Simulado
+  it('5. Boss Semanal: mock 5+5 não derrota, 15+15 na Base derrota, FULL_MOCK 90+90 válido, 89+90 inválido', () => {
+    const baseBoss = { targetQuestions: 30, p1Target: 15, p2Target: 15 };
+
+    const mock55 = buildMockExamRecord({
+      p1_correct: 5,
+      p1_wrong: 0,
+      p1_blank: 0,
+      p2_correct: 5,
+      p2_wrong: 0,
+      p2_blank: 0,
+      type: 'WEEKLY_CHECKPOINT',
+    });
+    expect(qualifiesForWeeklyBoss(mock55, baseBoss)).toBe(false);
+
+    const mock1515 = buildMockExamRecord({
+      p1_correct: 15,
+      p1_wrong: 0,
+      p1_blank: 0,
+      p2_correct: 15,
+      p2_wrong: 0,
+      p2_blank: 0,
+      type: 'WEEKLY_CHECKPOINT',
+    });
+    expect(qualifiesForWeeklyBoss(mock1515, baseBoss)).toBe(true);
+
+    const fullMock9090 = buildMockExamRecord({
+      p1_correct: 80,
+      p1_wrong: 10,
+      p1_blank: 0,
+      p2_correct: 85,
+      p2_wrong: 5,
+      p2_blank: 0,
+      type: 'FULL_MOCK',
+    });
+    expect(qualifiesForWeeklyBoss(fullMock9090, baseBoss)).toBe(true);
+
+    const fullMock8990 = buildMockExamRecord({
+      p1_correct: 79,
+      p1_wrong: 10,
+      p1_blank: 0, // 89 items in P1
+      p2_correct: 85,
+      p2_wrong: 5,
+      p2_blank: 0,
+      type: 'FULL_MOCK',
+    });
+    expect(qualifiesForWeeklyBoss(fullMock8990, baseBoss)).toBe(false);
+
+    // PARTIAL_MOCK with small volume does not get boss XP
+    const store = getDefaultStore();
+    const { store: storeWithSmallMock } = recordMockExamAction(
+      {
+        p1_correct: 5,
+        p1_wrong: 0,
+        p1_blank: 0,
+        p2_correct: 5,
+        p2_wrong: 0,
+        p2_blank: 0,
+        type: 'PARTIAL_MOCK',
+      },
+      store
+    );
+    // Should get 0 XP because questions < 30 and does not qualify for boss
+    expect(storeWithSmallMock.gamificationProfile.total_xp).toBe(0);
+  });
+
+  // 5. P3 Agenda Semanal
+  it('6. P3 Agenda: respeita discursiveWeeklyTarget, não gera todo dia, disponível com >= 60 min, alterna Q20/Peça', () => {
+    const store = getDefaultStore();
+    // Topic with available material so daily plan is active
+    store.materials = store.materials.map((m) =>
+      m.topic_id === 'top-p2-ling-3' ? { ...m, status: 'AVAILABLE', storage_path: '/p.pdf' } : m
+    );
+    store.settings.today_available_minutes = 90; // Between 60 and 150 min
+
+    const missions1 = generateDailyMissions('2026-10-15', store);
+    const p3Mission1 = missions1.find((m) => m.type === 'DISCURSIVE');
+    expect(p3Mission1).toBeDefined();
+    expect(p3Mission1!.title).toContain('Questão de até 20 linhas');
+
+    // Simulate user completed the Q20 session this week
+    store.discursiveSessions = [makeDiscursiveSession('sess-q20', 11.8)];
+
+    // In BASE phase, target is 1 session/week. Since 1 is done, next day should not generate P3!
+    const missionsNextDay = generateDailyMissions('2026-10-16', store);
+    const p3MissionNextDay = missionsNextDay.find((m) => m.type === 'DISCURSIVE');
+    expect(p3MissionNextDay).toBeUndefined();
+  });
+
+  // 6. Meaningful Coverage Trigger
+  it('7. Meaningful Coverage: 50 tópicos em LEARNING não disparam CONSOLIDATION; 65% concluídos disparam', () => {
+    // 50 topics in LEARNING out of 76 is ~65.7% started, but 0% meaningful
+    const phaseLearning = calculateJourneyPhase({
+      daysUntilExam: 100,
+      totalTopics: 76,
+      startedTopics: 50,
+      masteredTopics: 0,
+      atRiskTopics: 0,
+      meaningfulStartedTopics: 0,
+      p1StartedTopics: 25,
+      p1TotalTopics: 42,
+      p2StartedTopics: 25,
+      p2TotalTopics: 34,
+      averageDomainScore: 0,
+      totalQuestions: 0,
+      discursiveSessionsCount: 0,
+      mockExamsCount: 0,
+    });
+    expect(phaseLearning.phase).toBe('BASE');
+
+    // 50 topics with first-pass completed (CONSOLIDATING/MASTERED)
+    const phaseConsolidating = calculateJourneyPhase({
+      daysUntilExam: 100,
+      totalTopics: 76,
+      startedTopics: 50,
+      masteredTopics: 10,
+      atRiskTopics: 0,
+      meaningfulStartedTopics: 50,
+      p1StartedTopics: 28,
+      p1TotalTopics: 42,
+      p2StartedTopics: 22,
+      p2TotalTopics: 34,
+      averageDomainScore: 70,
+      totalQuestions: 500,
+      discursiveSessionsCount: 2,
+      mockExamsCount: 1,
+    });
+    expect(phaseConsolidating.phase).toBe('CONSOLIDATION');
+  });
+
+  // 7. StudySession & Material Time
+  it('8. StudySession: 40 min ontem + 1 min hoje não conta como 41 min hoje e streak não ativa com 1 min', () => {
+    const store = getDefaultStore();
+    const yesterday = '2026-10-14';
+    const today = '2026-10-15';
+
+    // Session yesterday: 40 min (2400 s)
+    const { store: s1 } = recordStudySessionAction(
+      {
+        user_id: 'local-user',
+        topic_id: 'top-p1-port-1',
+        material_id: 'mat-1',
+        session_type: 'MATERIAL',
+        started_at: `${yesterday}T10:00:00Z`,
+        ended_at: `${yesterday}T10:40:00Z`,
+        duration_seconds: 2400,
+      },
+      store
+    );
+
+    // Session today: 1 min (60 s)
+    const { store: s2 } = recordStudySessionAction(
+      {
+        user_id: 'local-user',
+        topic_id: 'top-p1-port-1',
+        material_id: 'mat-1',
+        session_type: 'MATERIAL',
+        started_at: `${today}T10:00:00Z`,
+        ended_at: `${today}T10:01:00Z`,
+        duration_seconds: 60,
+      },
+      s1
+    );
+
+    // Today is NOT a meaningful study day based on 1 min
+    expect(
+      isMeaningfulStudyDay(today, {
+        questionSessions: s2.questionSessions,
+        materialProgress: s2.materialProgress,
+        reviews: s2.reviews,
+        studySessions: s2.studySessions,
+        discursiveSessions: s2.discursiveSessions,
+        mockExams: s2.mockExams,
+      })
+    ).toBe(false);
+
+    // Mission CORE_STUDY on today only counts today's studySessions (1 min, not 41 min)
+    const mockMission: DailyMission = {
+      id: 'm-core',
+      date: today,
+      title: 'Estudo Teórico',
+      description: '',
+      type: 'CORE_STUDY',
+      target_value: 30,
+      current_value: 0,
+      unit: 'min',
+      status: 'PENDING',
+      reason: 'Teoria',
+      source: 'planner',
+      xp_reward: 40,
+      topic_id: 'top-p1-port-1',
+      created_at: '',
+    };
+
+    const updated = updateMissionsProgress([mockMission], today, s2);
+    expect(updated[0].current_value).toBe(1); // 60 seconds = 1 minute
+  });
+
+  it('9. StudySession: duas sessões de 20 min no mesmo dia respeitam daily cap de 60 XP', () => {
+    const store = getDefaultStore();
+    const today = '2026-10-15';
+
+    // First session: 20 min -> 30 XP
+    const { store: s1 } = recordStudySessionAction(
+      {
+        user_id: 'local-user',
+        topic_id: 'top-p1-port-1',
+        material_id: 'mat-1',
+        session_type: 'MATERIAL',
+        started_at: `${today}T10:00:00Z`,
+        ended_at: `${today}T10:20:00Z`,
+        duration_seconds: 1200,
+      },
+      store
+    );
+    expect(s1.gamificationProfile.total_xp).toBe(30);
+
+    // Second session: 20 min -> +30 XP (total 60 XP)
+    const { store: s2 } = recordStudySessionAction(
+      {
+        user_id: 'local-user',
+        topic_id: 'top-p1-port-2',
+        material_id: 'mat-2',
+        session_type: 'MATERIAL',
+        started_at: `${today}T11:00:00Z`,
+        ended_at: `${today}T11:20:00Z`,
+        duration_seconds: 1200,
+      },
+      s1
+    );
+    expect(s2.gamificationProfile.total_xp).toBe(60);
+
+    // Third session: 20 min -> cap is 60 XP/day, total stays 60 XP
+    const { store: s3 } = recordStudySessionAction(
+      {
+        user_id: 'local-user',
+        topic_id: 'top-p1-port-3',
+        material_id: 'mat-3',
+        session_type: 'MATERIAL',
+        started_at: `${today}T14:00:00Z`,
+        ended_at: `${today}T14:20:00Z`,
+        duration_seconds: 1200,
+      },
+      s2
+    );
+    expect(s3.gamificationProfile.total_xp).toBe(60);
+  });
+
+  // 8. Flashcard XP
+  it('10. Flashcard XP: review devido concede 1 XP, review antecipado concede 0 XP', () => {
+    let store = getDefaultStore();
+    store.flashcards = [
+      makeFlashcard('card-due-1'),
+      makeFlashcard('card-due-2'),
+      makeFlashcard('card-early'),
+    ];
+
+    store.fsrsStates = {
+      'card-due-1': {
+        flashcard_id: 'card-due-1',
+        user_id: 'local-user',
+        due: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+        stability: 2,
+        difficulty: 3,
+        elapsed_days: 0,
+        scheduled_days: 1,
+        learning_steps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 1,
+        last_review: null,
+        updated_at: new Date().toISOString(),
+      },
+      'card-due-2': {
+        flashcard_id: 'card-due-2',
+        user_id: 'local-user',
+        due: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
+        stability: 2,
+        difficulty: 3,
+        elapsed_days: 0,
+        scheduled_days: 1,
+        learning_steps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 1,
+        last_review: null,
+        updated_at: new Date().toISOString(),
+      },
+      'card-early': {
+        flashcard_id: 'card-early',
+        user_id: 'local-user',
+        due: new Date(Date.now() + 86400000).toISOString(), // Tomorrow
+        stability: 2,
+        difficulty: 3,
+        elapsed_days: 0,
+        scheduled_days: 1,
+        learning_steps: 0,
+        reps: 1,
+        lapses: 0,
+        state: 1,
+        last_review: null,
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    // Review due card -> +1 XP (queue not cleared because card-due-2 is still due)
+    store = reviewFlashcardAction('card-due-1', Rating.Good, 1500, store);
+    expect(store.gamificationProfile.total_xp).toBe(1);
+
+    // Review early card -> 0 XP (reviewed before due date)
+    store = reviewFlashcardAction('card-early', Rating.Good, 1500, store);
+    expect(store.gamificationProfile.total_xp).toBe(1);
+  });
+
+  // 9. Starter Mode
+  it('11. Starter Mode: store zerado recomenda Rank 1 Linguística (leitura/coerência) e Rank 2 Português (interpretação)', () => {
+    const store = getDefaultStore();
+    const plan = generateDailyPlan({
+      topics: store.topics,
+      subjects: store.subjects,
+      materials: store.materials,
+      errors: store.errorLogs,
+      overdueCardsCount: 0,
+    });
+
+    expect(plan.tasks[0].topicId).toBe('top-p2-ling-3'); // Rank 1: Leitura, compreensão, coesão, coerência e inferência
+    expect(plan.tasks[1].topicId).toBe('top-p1-port-1'); // Rank 2: Interpretação, compreensão, tipos e gêneros textuais
+  });
+});
+
