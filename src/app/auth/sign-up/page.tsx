@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/Button';
 import { Shield, Sparkles, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
@@ -75,7 +76,19 @@ export default function SignUpPage() {
       <div className="absolute bottom-1/4 right-1/2 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-md relative z-10 space-y-8">
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-3">
+          <div className="flex justify-center">
+            <div className="relative w-16 h-16 rounded-2xl p-1.5 bg-zinc-900 border border-zinc-800 shadow-xl flex items-center justify-center">
+              <Image
+                src="/logo.png"
+                alt="Logo Câmara 2027"
+                width={56}
+                height={56}
+                className="w-full h-full object-contain"
+                priority
+              />
+            </div>
+          </div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-mono text-zinc-400">
             <Shield className="w-3.5 h-3.5 text-indigo-400" />
             <span>Câmara dos Deputados • Analista Legislativo</span>

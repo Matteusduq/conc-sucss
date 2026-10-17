@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   CalendarDays,
@@ -46,19 +47,26 @@ export function Sidebar({ userEmail, onSignOut }: SidebarProps) {
       <div className="space-y-6">
         {/* Brand header */}
         <div className="px-3 py-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-zinc-100 flex items-center justify-center font-black text-zinc-950 text-sm">
-              CD
+          <Link href="/hoje" className="flex items-center gap-2.5 group">
+            <div className="relative w-8 h-8 rounded-lg overflow-hidden bg-zinc-900 border border-zinc-800 p-0.5 shrink-0 group-hover:border-zinc-700 transition-colors">
+              <Image
+                src="/logo.png"
+                alt="Logo Câmara 2027"
+                width={32}
+                height={32}
+                className="w-full h-full object-contain"
+                priority
+              />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-zinc-100 tracking-tight leading-tight">
+              <h2 className="text-sm font-bold text-zinc-100 tracking-tight leading-tight group-hover:text-white transition-colors">
                 Câmara 2027
               </h2>
-              <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-medium">
+              <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-medium">
                 Cockpit de Estudos
               </span>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Navigation list */}

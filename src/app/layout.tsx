@@ -16,6 +16,13 @@ export const metadata: Metadata = {
   title: 'Sistema de Estudos — Câmara dos Deputados 2027',
   description:
     'Centro de comando e otimização de estudos para o concurso da Câmara dos Deputados — Analista Legislativo (Registro e Redação). Prova em 17/01/2027.',
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/logo.png', type: 'image/png' },
+    ],
+    apple: [{ url: '/logo.png', type: 'image/png' }],
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
