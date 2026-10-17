@@ -20,6 +20,12 @@ export function PdfSelectionToolbar({
         top: `${position.top}px`,
         left: `${position.left}px`,
       }}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+      }}
       className="fixed z-50 -translate-x-1/2 -translate-y-full mb-2 animate-in fade-in zoom-in-95 duration-150"
     >
       <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-900/95 border border-amber-500/40 shadow-2xl backdrop-blur-md text-xs">
@@ -28,6 +34,10 @@ export function PdfSelectionToolbar({
             e.preventDefault();
             e.stopPropagation();
             onHighlightAndAskAI();
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
           }}
           disabled={isLoading}
           aria-label="Marcar trecho e consultar IA"

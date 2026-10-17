@@ -60,6 +60,8 @@ export function PdfDocumentView({
   onPageRendered,
 }: PdfDocumentViewProps) {
   const pageContainerRef = useRef<HTMLDivElement>(null);
+  const suppressNextClickRef = useRef<boolean>(false);
+  const lastSelectionTimeRef = useRef<number>(0);
   const [pageWidth, setPageWidth] = useState<number>(750);
   const [isPageLoaded, setIsPageLoaded] = useState<boolean>(false);
 
@@ -74,12 +76,14 @@ export function PdfDocumentView({
     const container = pageContainerRef.current;
     if (!container) return;
 
-    const validation = validateSelection(range, container);
+    const pageEl = (container.querySelector('.react-pdf__Page') as HTMLElement) || container;
+    const validation = validateSelection(range, pageEl);
 
     if (
       !validation.isValid ||
       !validation.selectedText ||
       !validation.rects ||
+      validation.rects.length === 0 ||
       !validation.clientRect
     ) {
       if (validation.error === 'MULTI_PAGE') {
@@ -91,7 +95,7 @@ export function PdfDocumentView({
     // Extrai o texto da página a partir da textLayer
     const textLayerEl =
       (container.querySelector('.react-pdf__Page__textContent') as HTMLElement) ||
-      (container.querySelector('.react-pdf__Page__textLayer') as HTMLElement) ||
+      (container.querySelector('.textLayer') as HTMLElement) ||
       container;
     const fullPageText = textLayerEl.textContent || '';
     const anchorContext = extractAnchorContext(fullPageText, validation.selectedText);
@@ -122,40 +126,60 @@ export function PdfDocumentView({
       endOffset: anchorContext.endOffset,
     };
 
-    // 5. Remove imediatamente a seleção nativa do browser para eliminar o fundo azul/cinza
+    // Remove imediatamente a seleção nativa do browser para eliminar o fundo azul/cinza
     try {
       selection.removeAllRanges();
     } catch {
       // Ignora se não for suportado pelo ambiente
     }
 
+    // Suprime o evento de click imediato/sintético gerado pelo navegador após o drag
+    suppressNextClickRef.current = true;
+    lastSelectionTimeRef.current = Date.now();
+
     // Notifica componente pai com todos os dados capturados
     onTextSelected(payload);
   }, [onMultiPageSelectionAttempt, onTextSelected]);
 
-  // 2. Detecção de clique em marcações salvas ou clique fora para dispensar toolbar
+  // Listener global de mouseup para nunca perder o término da seleção, mesmo soltando fora da div
+  useEffect(() => {
+    const onDocMouseUp = () => {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+        handleSelection();
+      }
+    };
+    document.addEventListener('mouseup', onDocMouseUp);
+    return () => document.removeEventListener('mouseup', onDocMouseUp);
+  }, [handleSelection]);
+
+  // 2. Detecção de clique em marcações salvas ou clique fora intencional para dispensar toolbar
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
+      // 1. Se suppressNextClickRef === true OU clique ocorreu nos primeiros 400ms da seleção:
+      //    resetar para false e retornar para proteger activeSelection contra o clique do drag
+      const isRecentSelection = Date.now() - lastSelectionTimeRef.current < 400;
+      if (suppressNextClickRef.current || isRecentSelection) {
+        suppressNextClickRef.current = false;
+        return;
+      }
+
       // Se houver seleção ativa em andamento com drag, não faz nada
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) {
         return;
       }
 
-      // Se havia uma seleção pendente aberta e o usuário clicou no documento, limpa a seleção
-      if (activeSelection) {
-        onClearSelection();
-        return;
-      }
-
       const container = pageContainerRef.current;
       if (!container) return;
 
-      const rect = container.getBoundingClientRect();
+      const pageEl = (container.querySelector('.react-pdf__Page') as HTMLElement) || container;
+      const rect = pageEl.getBoundingClientRect();
       const clickX = (e.clientX - rect.left) / rect.width;
       const clickY = (e.clientY - rect.top) / rect.height;
 
-      // Verifica se o clique ocorreu sobre algum highlight existente da versão atual
+      // 2. Detectar se o clique foi sobre um highlight existente:
+      //    se sim, abrir esse highlight
       const clickedHighlight = highlights.find((h) => {
         if (
           currentMaterialVersion !== undefined &&
@@ -174,6 +198,14 @@ export function PdfDocumentView({
 
       if (clickedHighlight) {
         onSelectHighlight(clickedHighlight);
+        return;
+      }
+
+      // 3. Se existe activeSelection e foi um clique posterior realmente intencional fora do toolbar:
+      //    então pode limpar a seleção
+      if (activeSelection) {
+        onClearSelection();
+        return;
       }
     },
     [activeSelection, currentMaterialVersion, highlights, onClearSelection, onSelectHighlight]
@@ -186,7 +218,8 @@ export function PdfDocumentView({
       const container = pageContainerRef.current;
       if (!container) return;
 
-      const rect = container.getBoundingClientRect();
+      const pageEl = (container.querySelector('.react-pdf__Page') as HTMLElement) || container;
+      const rect = pageEl.getBoundingClientRect();
       const mouseX = (e.clientX - rect.left) / rect.width;
       const mouseY = (e.clientY - rect.top) / rect.height;
 
@@ -229,7 +262,7 @@ export function PdfDocumentView({
     const timer = setTimeout(() => {
       const textLayerEl =
         (container.querySelector('.react-pdf__Page__textContent') as HTMLElement) ||
-        (container.querySelector('.react-pdf__Page__textLayer') as HTMLElement) ||
+        (container.querySelector('.textLayer') as HTMLElement) ||
         container;
       const fullPageText = textLayerEl.textContent || '';
       onPageRendered?.(currentPage, fullPageText, container);
@@ -245,30 +278,75 @@ export function PdfDocumentView({
       onTouchEnd={handleSelection}
     >
       <style>{`
+        /* Stacking context e visibilidade rigorosa das camadas do PDF */
         .react-pdf__Page {
           position: relative !important;
         }
+
+        /* 1. Base do PDF (Canvas): visual do documento sem interceptar mouse events */
         .react-pdf__Page__canvas {
           position: relative !important;
           z-index: 1 !important;
           display: block !important;
+          pointer-events: none !important;
+          user-select: none !important;
         }
+
+        /* 2. Camada visual de highlights: sob o texto, sobre o canvas */
         .pdf-highlight-overlay {
           position: absolute !important;
           inset: 0 !important;
           z-index: 2 !important;
           pointer-events: none !important;
         }
-        .react-pdf__Page__textLayer {
+
+        /* 3. Text Layer nativa do PDF: captura direta do mouse e seleção 100% fluida */
+        .react-pdf__Page__textContent,
+        .textLayer {
           position: absolute !important;
           inset: 0 !important;
           z-index: 3 !important;
           pointer-events: auto !important;
+          user-select: text !important;
+          -webkit-user-select: text !important;
+          opacity: 1 !important;
         }
-        .react-pdf__Page__annotations {
+
+        .react-pdf__Page__textContent span,
+        .textLayer span {
+          pointer-events: auto !important;
+          user-select: text !important;
+          -webkit-user-select: text !important;
+          cursor: text !important;
+        }
+
+        /* Estilo da seleção ativa no PDF: destaque suave translúcido sem ofuscar o texto do canvas */
+        .react-pdf__Page__textContent ::selection,
+        .textLayer ::selection,
+        .react-pdf__Page__textContent span::selection,
+        .textLayer span::selection {
+          background: rgba(250, 204, 21, 0.35) !important;
+          color: transparent !important;
+        }
+
+        /* 4. Camada de anotações: não bloqueia cliques/drags exceto em links interativos */
+        .react-pdf__Page__annotations,
+        .annotationLayer,
+        .react-pdf__Page__annotations section,
+        .annotationLayer section {
           position: absolute !important;
           inset: 0 !important;
           z-index: 4 !important;
+          pointer-events: none !important;
+        }
+
+        .react-pdf__Page__annotations a,
+        .react-pdf__Page__annotations button,
+        .react-pdf__Page__annotations input,
+        .annotationLayer a,
+        .annotationLayer button,
+        .annotationLayer input {
+          pointer-events: auto !important;
         }
       `}</style>
 
@@ -293,6 +371,8 @@ export function PdfDocumentView({
           ref={pageContainerRef}
           onClick={handleClick}
           onMouseMove={handleMouseMove}
+          onMouseUp={handleSelection}
+          onTouchEnd={handleSelection}
           className="relative shadow-2xl rounded-lg overflow-hidden bg-white border border-zinc-700/60"
         >
           <Page

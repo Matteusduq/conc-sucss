@@ -180,7 +180,20 @@ export function validateSelection(
       return { valid: false, isValid: false, error: 'A seleção deve ser feita dentro do documento.' };
     }
 
-    if (!isStartInPage || !isEndInPage) {
+    // Verifica se realmente cruzou páginas distintas (elementos .react-pdf__Page diferentes)
+    const startPage = (
+      range.startContainer.nodeType === 1
+        ? (range.startContainer as Element)
+        : range.startContainer.parentElement
+    )?.closest?.('.react-pdf__Page');
+
+    const endPage = (
+      range.endContainer.nodeType === 1
+        ? (range.endContainer as Element)
+        : range.endContainer.parentElement
+    )?.closest?.('.react-pdf__Page');
+
+    if (startPage && endPage && startPage !== endPage) {
       return {
         valid: false,
         isValid: false,
@@ -189,12 +202,26 @@ export function validateSelection(
     }
 
     const pageRect = pageElement.getBoundingClientRect();
-    const rawRects = typeof range.getClientRects === 'function' ? range.getClientRects() : [];
-    const rects = normalizeRects(rawRects, pageRect);
+    const rawRects = typeof range.getClientRects === 'function' ? Array.from(range.getClientRects()) : [];
+    
+    // Se getClientRects vier vazio, utiliza getBoundingClientRect como fallback seguro
+    if (rawRects.length === 0 && typeof range.getBoundingClientRect === 'function') {
+      const bRect = range.getBoundingClientRect();
+      if (bRect.width > 0 && bRect.height > 0) {
+        rawRects.push(bRect);
+      }
+    }
+
+    let rects = normalizeRects(rawRects, pageRect);
     const clientRect =
       typeof range.getBoundingClientRect === 'function'
         ? range.getBoundingClientRect()
-        : (rawRects[0] ?? { left: 0, top: 0, width: 0, height: 0 } as DOMRect);
+        : (rawRects[0] ?? ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect));
+
+    // Se rects estiver vazio mas temos clientRect com largura e altura válidas, normaliza o clientRect
+    if (rects.length === 0 && clientRect.width > 0 && clientRect.height > 0) {
+      rects = normalizeRects([clientRect], pageRect);
+    }
 
     return {
       valid: true,
@@ -298,3 +325,44 @@ export function findDomRectsForText(
   return null;
 }
 
+/**
+ * Gerencia a coordenação entre a seleção por drag (mouseup) e o evento de clique subsequente
+ * disparado sinteticamente pelo navegador, prevenindo que o clique automático limpe a seleção recém-criada.
+ */
+export class SelectionClickCoordinator {
+  private suppressNextClick = false;
+
+  /**
+   * Chamado ao reconhecer uma seleção válida no mouseup
+   */
+  onValidSelection(): void {
+    this.suppressNextClick = true;
+  }
+
+  /**
+   * Chamado quando um evento de clique ocorre no documento/leitor
+   * Retorna 'SUPPRESSED' se o clique foi gerado sinteticamente logo após a seleção;
+   * Retorna 'PROCESS_CLICK' se o clique foi intencional e deve ser processado.
+   */
+  handleClick(): 'SUPPRESSED' | 'PROCESS_CLICK' {
+    if (this.suppressNextClick) {
+      this.suppressNextClick = false;
+      return 'SUPPRESSED';
+    }
+    return 'PROCESS_CLICK';
+  }
+
+  /**
+   * Retorna se o próximo clique está atualmente suprimido
+   */
+  isClickSuppressed(): boolean {
+    return this.suppressNextClick;
+  }
+
+  /**
+   * Reseta o estado
+   */
+  reset(): void {
+    this.suppressNextClick = false;
+  }
+}

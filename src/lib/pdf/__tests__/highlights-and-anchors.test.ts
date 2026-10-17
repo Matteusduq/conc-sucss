@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeRects, denormalizeRect, validateSelection } from '../highlights';
+import { normalizeRects, denormalizeRect, validateSelection, SelectionClickCoordinator } from '../highlights';
 import { extractAnchorContext, reanchorHighlight } from '../text-anchor';
 
 describe('PDF Highlights & Anchoring Utilities (Points 8-13)', () => {
@@ -200,5 +200,74 @@ describe('PDF Highlights & Anchoring Utilities (Points 8-13)', () => {
     expect(notFoundResult.startOffset).toBeNull();
     expect(notFoundResult.message).toBe('Esta marcação precisa ser revisada após a atualização do PDF.');
   });
+
+  // Teste de regressão contra o click sintético após drag selection
+  it('valid text drag selection must survive the subsequent synthetic click', () => {
+    const coordinator = new SelectionClickCoordinator();
+    let activeSelection: { selectedText: string; rects: any[] } | null = null;
+    let clearCallCount = 0;
+
+    const onClearSelection = () => {
+      clearCallCount++;
+      activeSelection = null;
+    };
+
+    // 1. handleSelection cria activeSelection ao reconhecer uma seleção válida por drag
+    coordinator.onValidSelection();
+    activeSelection = {
+      selectedText: 'Art. 59 O processo legislativo compreende',
+      rects: [{ x: 0.1, y: 0.2, width: 0.5, height: 0.03 }],
+    };
+
+    expect(activeSelection).not.toBeNull();
+    expect(coordinator.isClickSuppressed()).toBe(true);
+
+    // 2. O click imediatamente posterior disparado pelo browser (synthetic click) NÃO limpa a seleção
+    const syntheticClickAction = coordinator.handleClick();
+    expect(syntheticClickAction).toBe('SUPPRESSED');
+
+    if (syntheticClickAction !== 'SUPPRESSED') {
+      onClearSelection();
+    }
+
+    // A seleção pendente sobreviveu intacta
+    expect(activeSelection).not.toBeNull();
+    expect(clearCallCount).toBe(0);
+    expect(coordinator.isClickSuppressed()).toBe(false);
+
+    // 3. Um segundo clique intencional posterior fora do toolbar pode limpar a seleção
+    const intentionalClickAction = coordinator.handleClick();
+    expect(intentionalClickAction).toBe('PROCESS_CLICK');
+
+    if (intentionalClickAction === 'PROCESS_CLICK' && activeSelection) {
+      onClearSelection();
+    }
+
+    expect(activeSelection).toBeNull();
+    expect(clearCallCount).toBe(1);
+  });
+
+  // Teste de fallback seguro quando getClientRects retorna vazio
+  it('validateSelection falls back to getBoundingClientRect if getClientRects is empty', () => {
+    const mockPageElement = {
+      contains: () => true,
+      getBoundingClientRect: () => ({ left: 100, top: 100, width: 800, height: 1000 } as DOMRect),
+    } as unknown as HTMLElement;
+
+    const mockRange = {
+      startContainer: { nodeType: 3, parentElement: mockPageElement } as unknown as Node,
+      endContainer: { nodeType: 3, parentElement: mockPageElement } as unknown as Node,
+      toString: () => 'Art. 59. O processo legislativo',
+      getClientRects: () => [] as unknown as DOMRectList,
+      getBoundingClientRect: () => ({ left: 180, top: 200, width: 300, height: 20 } as DOMRect),
+    } as unknown as Range;
+
+    const res = validateSelection(mockRange, mockPageElement);
+    expect(res.valid).toBe(true);
+    expect(res.rects).toHaveLength(1);
+    expect(res.rects![0].x).toBeCloseTo(0.1, 4);
+    expect(res.rects![0].y).toBeCloseTo(0.1, 4);
+  });
 });
+
 
