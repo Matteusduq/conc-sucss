@@ -446,15 +446,52 @@ export function loadStore(): AppStoreData {
         const missingTopics = SEED_TOPICS.filter((t) => !existingIds.has(t.id));
         data.topics = [...data.topics, ...missingTopics];
       }
-      // Synchronize starter_rank from SEED_TOPICS if missing in loaded store
+      // Synchronize starter_rank, priority, and metadata from SEED_TOPICS if updated
       const seedTopicMap = new Map(SEED_TOPICS.map((st) => [st.id, st]));
       data.topics = data.topics.map((t) => {
         const seedT = seedTopicMap.get(t.id);
-        if (seedT && seedT.starter_rank !== undefined && t.starter_rank === undefined) {
-          return { ...t, starter_rank: seedT.starter_rank };
+        if (seedT) {
+          return {
+            ...t,
+            name: seedT.name,
+            slug: seedT.slug,
+            description: seedT.description,
+            priority: seedT.priority,
+            priority_label: seedT.priority_label,
+            priority_weight: seedT.priority_weight,
+            priority_source: seedT.priority_source,
+            priority_basis: seedT.priority_basis,
+            priority_confidence: seedT.priority_confidence,
+            cross_relevance: seedT.cross_relevance,
+            discursive_synergy: seedT.discursive_synergy,
+            recommended_material_type: seedT.recommended_material_type,
+            starter_rank: seedT.starter_rank !== undefined ? seedT.starter_rank : t.starter_rank,
+          };
         }
         return t;
       });
+
+      if (data.materials) {
+        const matTopicMap = new Map(data.topics.map((t) => [t.id, t]));
+        data.materials = data.materials.map((m) => {
+          const t = matTopicMap.get(m.topic_id);
+          if (t && m.status === 'PENDING') {
+            let typePrefix = 'PDF completo';
+            if (t.recommended_material_type === 'SIMPLIFIED_PDF') {
+              typePrefix = 'PDF simplificado';
+            } else if (t.recommended_material_type === 'SUMMARY') {
+              typePrefix = 'Resumo';
+            }
+            return {
+              ...m,
+              title: `${typePrefix} — ${t.name}`,
+              material_type: t.recommended_material_type,
+            };
+          }
+          return m;
+        });
+      }
+
       if (!data.topics || data.topics.some((t) => !t.study_score || t.study_score === 0)) {
         data = recalculateAllStudyScoresService(data);
       }

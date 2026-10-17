@@ -82,6 +82,41 @@ describe('2. Integridade Estrutural das Provas (P1, P2 e P3)', () => {
     }
   });
 
+  it('verifies pedagogical audit distribution: exactly 49 HIGH, 26 MEDIUM, and 1 LOW topics', () => {
+    const highTopics = INITIAL_SEED_DATA.topics.filter((t) => t.priority === 'HIGH');
+    const mediumTopics = INITIAL_SEED_DATA.topics.filter((t) => t.priority === 'MEDIUM');
+    const lowTopics = INITIAL_SEED_DATA.topics.filter((t) => t.priority === 'LOW');
+
+    expect(highTopics).toHaveLength(49);
+    expect(mediumTopics).toHaveLength(26);
+    expect(lowTopics).toHaveLength(1);
+    expect(lowTopics[0].id).toBe('top-p1-port-7'); // Ortografia is the only LOW topic
+
+    // Verify the 7 promoted topics
+    const promotedIds = [
+      'top-p1-ti-7',
+      'top-p1-ti-8',
+      'top-p2-ling-8',
+      'top-p2-ling-9',
+      'top-p2-pol-1',
+      'top-p2-pol-2',
+      'top-p2-pol-4',
+    ];
+
+    for (const id of promotedIds) {
+      const topic = INITIAL_SEED_DATA.topics.find((t) => t.id === id);
+      expect(topic).toBeDefined();
+      expect(topic?.priority).toBe('HIGH');
+      expect(topic?.priority_weight).toBe(3.0);
+      expect(topic?.recommended_material_type).toBe('FULL_PDF');
+    }
+
+    // Verify top-p2-ling-9 explicit name
+    const ling9 = INITIAL_SEED_DATA.topics.find((t) => t.id === 'top-p2-ling-9');
+    expect(ling9?.name.toLowerCase()).toContain('retórica');
+    expect(ling9?.name.toLowerCase()).toContain('figuras de linguagem');
+  });
+
   it('guarantees 1 material placeholder per topic (not per microitem)', () => {
     expect(INITIAL_SEED_DATA.materials).toHaveLength(INITIAL_SEED_DATA.topics.length);
     for (const material of INITIAL_SEED_DATA.materials) {

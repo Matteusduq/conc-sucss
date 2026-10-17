@@ -380,7 +380,7 @@ export const P1_ADMINISTRATIVO_TOPICS: Topic[] = [
     parent_topic_id: null,
     name: 'Planejamento da contratação, ETP e Termo de Referência',
     slug: 'planejamento-contratacao-etp-termo-de-referencia',
-    description: 'Fase preparatória da contratação: Estudo Técnico Preliminar (ETP), Termo de Referência (TR), Mapa de Riscos e pesquisa de preços.',
+    description: 'Fase preparatória da contratação: Estudo Técnico Preliminar (ETP) e Termo de Referência (TR); Mapa de Riscos e pesquisa de preços como apoio complementar.',
     priority: 'HIGH',
     priority_label: 'Alta Prioridade',
     priority_weight: 3.0,
