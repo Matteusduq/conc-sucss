@@ -168,17 +168,29 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
     updater: (prev: AppStoreData) => AppStoreData,
     persistFn?: (repo: SupabaseStudyRepository, userId: string) => Promise<void>
   ) => {
-    const nextStore = updater(store);
-    setStore(nextStore);
+    const prevStore = store;
+    const nextStore = updater(prevStore);
 
     if (user && persistFn) {
       try {
         const supabase = createClient();
         const repo = new SupabaseStudyRepository(supabase);
         await persistFn(repo, user.id);
+        setStore(nextStore);
       } catch (err) {
         console.error('Falha na persistência remota:', err);
+        setStore(prevStore);
+        pushNotification({
+          id: `notif-err-${Date.now()}`,
+          type: 'XP_AWARDED',
+          title: 'Erro de Sincronização',
+          message: 'Não foi possível salvar esta alteração no servidor. Tente novamente.',
+          timestamp: new Date().toISOString(),
+        });
+        throw err;
       }
+    } else {
+      setStore(nextStore);
     }
   };
 
@@ -380,7 +392,7 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
         enabled={store.settings?.gamification_show_xp_toast !== false}
       />
 
-      {/* Modais Globais com persistência automática no Supabase */}
+      {/* Modais Globais com persistência atômica no Supabase */}
       <RecordMockModal
         isOpen={mockModalOpen}
         onClose={() => setMockModalOpen(false)}
@@ -394,19 +406,20 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
             },
             store
           );
-          setStore(updated);
 
-          if (user) {
-            const supabase = createClient();
-            const repo = new SupabaseStudyRepository(supabase);
-            await repo.persistMockExam(user.id, mockExam);
-            await repo.persistGamification(
-              user.id,
-              updated.gamificationProfile,
-              updated.xpTransactions,
-              updated.unlockedAchievements
-            );
-          }
+          await updateStore(
+            () => updated,
+            async (repo, uId) => {
+              await repo.persistMockExam(uId, mockExam);
+              await repo.persistGamification(
+                uId,
+                updated.gamificationProfile,
+                updated.xpTransactions,
+                updated.unlockedAchievements,
+                updated.dailyMissions
+              );
+            }
+          );
 
           pushNotification({
             id: `notif-mock-${Date.now()}`,
@@ -435,22 +448,27 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
             },
             store
           );
-          setStore(updated);
 
-          if (user) {
-            const supabase = createClient();
-            const repo = new SupabaseStudyRepository(supabase);
-            const latestSession = updated.questionSessions[0];
-            if (latestSession) {
-              await repo.persistQuestionSession(user.id, latestSession);
+          await updateStore(
+            () => updated,
+            async (repo, uId) => {
+              const latestSession = updated.questionSessions[0];
+              if (latestSession) {
+                await repo.persistQuestionSession(uId, latestSession);
+              }
+              const updatedTopic = updated.topics.find((t) => t.id === sessionData.topic_id);
+              if (updatedTopic) {
+                await repo.persistTopic(uId, updatedTopic);
+              }
+              await repo.persistGamification(
+                uId,
+                updated.gamificationProfile,
+                updated.xpTransactions,
+                updated.unlockedAchievements,
+                updated.dailyMissions
+              );
             }
-            await repo.persistGamification(
-              user.id,
-              updated.gamificationProfile,
-              updated.xpTransactions,
-              updated.unlockedAchievements
-            );
-          }
+          );
 
           pushNotification({
             id: `notif-qs-${Date.now()}`,
@@ -482,22 +500,23 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
             },
             store
           );
-          setStore(updated);
 
-          if (user) {
-            const supabase = createClient();
-            const repo = new SupabaseStudyRepository(supabase);
-            const latestError = updated.errorLogs[0];
-            if (latestError) {
-              await repo.persistErrorLog(user.id, latestError);
+          await updateStore(
+            () => updated,
+            async (repo, uId) => {
+              const latestError = updated.errorLogs[0];
+              if (latestError) {
+                await repo.persistErrorLog(uId, latestError);
+              }
+              await repo.persistGamification(
+                uId,
+                updated.gamificationProfile,
+                updated.xpTransactions,
+                updated.unlockedAchievements,
+                updated.dailyMissions
+              );
             }
-            await repo.persistGamification(
-              user.id,
-              updated.gamificationProfile,
-              updated.xpTransactions,
-              updated.unlockedAchievements
-            );
-          }
+          );
 
           pushNotification({
             id: `notif-err-${Date.now()}`,
@@ -528,17 +547,17 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
             },
             store
           );
-          setStore(updated);
 
-          if (user) {
-            const supabase = createClient();
-            const repo = new SupabaseStudyRepository(supabase);
-            const latestCard = updated.flashcards[0];
-            const latestFsrs = latestCard ? updated.fsrsStates[latestCard.id] : undefined;
-            if (latestCard) {
-              await repo.persistFlashcard(user.id, latestCard, latestFsrs);
+          await updateStore(
+            () => updated,
+            async (repo, uId) => {
+              const latestCard = updated.flashcards[0];
+              const latestFsrs = latestCard ? updated.fsrsStates[latestCard.id] : undefined;
+              if (latestCard) {
+                await repo.persistFlashcard(uId, latestCard, latestFsrs);
+              }
             }
-          }
+          );
         }}
       />
     </ModalContext.Provider>

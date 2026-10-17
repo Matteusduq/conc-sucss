@@ -23,8 +23,10 @@ import {
   mapGamificationProfileFromDb,
   mapXpTransactionFromDb,
   mapDailyMissionFromDb,
+  mapDailyMissionToDb,
 } from '../mappers';
 import {
+  Exam,
   QuestionSession,
   ErrorLog,
   Flashcard,
@@ -44,6 +46,13 @@ import {
   DailyMission,
 } from '@/lib/gamification/types';
 
+export class PersistenceError extends Error {
+  constructor(message: string, public readonly originalError?: unknown) {
+    super(message);
+    this.name = 'PersistenceError';
+  }
+}
+
 export class SupabaseStudyRepository {
   constructor(private supabase: SupabaseClient) {}
 
@@ -53,11 +62,14 @@ export class SupabaseStudyRepository {
    */
   async loadAll(userId: string): Promise<AppStoreData> {
     if (!userId) {
-      throw new Error('userId obrigatório para carregar dados do Supabase.');
+      throw new PersistenceError('userId obrigatório para carregar dados do Supabase.');
     }
 
     // 1. Garante que os 76 Topics e 182 SyllabusItems existem no backend
-    await ensureUserStudyData(userId, this.supabase);
+    const bootRes = await ensureUserStudyData(userId, this.supabase);
+    if (!bootRes.success) {
+      throw new PersistenceError(`Falha no bootstrap curricular: ${bootRes.error}`);
+    }
 
     // 2. Consulta paralela otimizada de todas as coleções
     const [
@@ -151,6 +163,10 @@ export class SupabaseStudyRepository {
           memory_daily_minutes: 20,
           desired_retention: 0.90,
           today_available_minutes: null,
+          gamification_show_animations: true,
+          gamification_show_xp_toast: true,
+          gamification_show_streak: true,
+          gamification_weekly_target_days: 5,
           updated_at: new Date().toISOString(),
         };
 
@@ -215,7 +231,7 @@ export class SupabaseStudyRepository {
   }
 
   // ==========================================================================
-  // PERSISTÊNCIA INCREMENTAL (Chamada após updates puros do domínio)
+  // PERSISTÊNCIA INCREMENTAL (Erros não são engolidos — lançam PersistenceError)
   // ==========================================================================
 
   async persistQuestionSession(userId: string, session: QuestionSession): Promise<void> {
@@ -238,7 +254,16 @@ export class SupabaseStudyRepository {
       net_rate: session.net_rate,
       had_conceptual_error: session.had_conceptual_error,
     }, { onConflict: 'user_id, id' });
-    if (error) console.error('Erro ao persistir question session:', error.message);
+    if (error) throw new PersistenceError(`Erro ao persistir question session: ${error.message}`, error);
+  }
+
+  async deleteQuestionSession(userId: string, sessionId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('question_sessions')
+      .delete()
+      .eq('user_id', userId)
+      .eq('id', sessionId);
+    if (error) throw new PersistenceError(`Erro ao excluir question session: ${error.message}`, error);
   }
 
   async persistErrorLog(userId: string, err: ErrorLog): Promise<void> {
@@ -257,7 +282,16 @@ export class SupabaseStudyRepository {
       resolved: err.resolved,
       resolved_at: err.resolved_at,
     }, { onConflict: 'user_id, id' });
-    if (error) console.error('Erro ao persistir error log:', error.message);
+    if (error) throw new PersistenceError(`Erro ao persistir error log: ${error.message}`, error);
+  }
+
+  async deleteErrorLog(userId: string, errorId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('error_logs')
+      .delete()
+      .eq('user_id', userId)
+      .eq('id', errorId);
+    if (error) throw new PersistenceError(`Erro ao excluir error log: ${error.message}`, error);
   }
 
   async persistFlashcard(userId: string, card: Flashcard, fsrsState?: FlashcardFsrsState): Promise<void> {
@@ -278,7 +312,7 @@ export class SupabaseStudyRepository {
       active: card.active,
       suspended: card.suspended,
     }, { onConflict: 'user_id, id' });
-    if (cardErr) console.error('Erro ao persistir flashcard:', cardErr.message);
+    if (cardErr) throw new PersistenceError(`Erro ao persistir flashcard: ${cardErr.message}`, cardErr);
 
     if (fsrsState) {
       const { error: fsrsErr } = await this.supabase.from('flashcard_fsrs_state').upsert({
@@ -295,8 +329,17 @@ export class SupabaseStudyRepository {
         state: fsrsState.state,
         last_review: fsrsState.last_review,
       }, { onConflict: 'user_id, flashcard_id' });
-      if (fsrsErr) console.error('Erro ao persistir fsrs state:', fsrsErr.message);
+      if (fsrsErr) throw new PersistenceError(`Erro ao persistir fsrs state: ${fsrsErr.message}`, fsrsErr);
     }
+  }
+
+  async deleteFlashcard(userId: string, flashcardId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('flashcards')
+      .delete()
+      .eq('user_id', userId)
+      .eq('id', flashcardId);
+    if (error) throw new PersistenceError(`Erro ao excluir flashcard: ${error.message}`, error);
   }
 
   async persistFlashcardReview(
@@ -316,7 +359,7 @@ export class SupabaseStudyRepository {
       fsrs_log: review.fsrs_log,
       was_due_at_review: review.was_due_at_review,
     }, { onConflict: 'user_id, id' });
-    if (revErr) console.error('Erro ao persistir review:', revErr.message);
+    if (revErr) throw new PersistenceError(`Erro ao persistir review: ${revErr.message}`, revErr);
 
     const { error: fsrsErr } = await this.supabase.from('flashcard_fsrs_state').upsert({
       user_id: userId,
@@ -332,7 +375,7 @@ export class SupabaseStudyRepository {
       state: fsrsState.state,
       last_review: fsrsState.last_review,
     }, { onConflict: 'user_id, flashcard_id' });
-    if (fsrsErr) console.error('Erro ao atualizar fsrs state:', fsrsErr.message);
+    if (fsrsErr) throw new PersistenceError(`Erro ao atualizar fsrs state: ${fsrsErr.message}`, fsrsErr);
   }
 
   async persistStudySession(userId: string, session: StudySession): Promise<void> {
@@ -349,7 +392,7 @@ export class SupabaseStudyRepository {
       duration_seconds: session.duration_seconds,
       notes: session.notes,
     }, { onConflict: 'user_id, id' });
-    if (error) console.error('Erro ao persistir study session:', error.message);
+    if (error) throw new PersistenceError(`Erro ao persistir study session: ${error.message}`, error);
   }
 
   async persistMaterialProgress(userId: string, prog: MaterialProgress): Promise<void> {
@@ -369,7 +412,7 @@ export class SupabaseStudyRepository {
       notes_by_page: prog.notes_by_page,
       bookmarks: prog.bookmarks,
     }, { onConflict: 'user_id, material_id' });
-    if (error) console.error('Erro ao persistir material progress:', error.message);
+    if (error) throw new PersistenceError(`Erro ao persistir material progress: ${error.message}`, error);
   }
 
   async persistDiscursiveSession(userId: string, session: DiscursiveSession): Promise<void> {
@@ -390,7 +433,16 @@ export class SupabaseStudyRepository {
       calculated_score: session.calculated_score,
       notes: session.notes,
     }, { onConflict: 'user_id, id' });
-    if (error) console.error('Erro ao persistir discursive session:', error.message);
+    if (error) throw new PersistenceError(`Erro ao persistir discursive session: ${error.message}`, error);
+  }
+
+  async deleteDiscursiveSession(userId: string, sessionId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('discursive_sessions')
+      .delete()
+      .eq('user_id', userId)
+      .eq('id', sessionId);
+    if (error) throw new PersistenceError(`Erro ao excluir discursive session: ${error.message}`, error);
   }
 
   async persistMockExam(userId: string, mock: MockExam): Promise<void> {
@@ -416,7 +468,7 @@ export class SupabaseStudyRepository {
       duration_seconds: mock.duration_seconds,
       notes: mock.notes,
     }, { onConflict: 'user_id, id' });
-    if (error) console.error('Erro ao persistir mock exam:', error.message);
+    if (error) throw new PersistenceError(`Erro ao persistir mock exam: ${error.message}`, error);
   }
 
   async persistTopic(userId: string, topic: Topic): Promise<void> {
@@ -430,7 +482,7 @@ export class SupabaseStudyRepository {
       priority: topic.priority,
       priority_weight: topic.priority_weight,
     }).eq('user_id', userId).eq('id', topic.id);
-    if (error) console.error('Erro ao persistir topic:', error.message);
+    if (error) throw new PersistenceError(`Erro ao persistir topic: ${error.message}`, error);
   }
 
   async persistTopics(userId: string, topics: Topic[]): Promise<void> {
@@ -452,8 +504,32 @@ export class SupabaseStudyRepository {
       const { error } = await this.supabase.from('topics').upsert(chunk, {
         onConflict: 'user_id, id',
       });
-      if (error) console.error('Erro ao atualizar chunk de topics:', error.message);
+      if (error) throw new PersistenceError(`Erro ao atualizar chunk de topics: ${error.message}`, error);
     }
+  }
+
+  async updateExam(userId: string, exam: Partial<Exam> & { id: string }): Promise<void> {
+    const payload: Record<string, unknown> = {};
+    if (exam.exam_date !== undefined) payload.exam_date = exam.exam_date;
+    if (exam.name !== undefined) payload.name = exam.name;
+    if (exam.active !== undefined) payload.active = exam.active;
+    payload.updated_at = new Date().toISOString();
+
+    const { error } = await this.supabase
+      .from('exams')
+      .update(payload)
+      .eq('user_id', userId)
+      .eq('id', exam.id);
+    if (error) throw new PersistenceError(`Erro ao atualizar exame: ${error.message}`, error);
+  }
+
+  async persistDailyMissions(userId: string, missions: DailyMission[]): Promise<void> {
+    if (missions.length === 0) return;
+    const rows = missions.map((m) => mapDailyMissionToDb(m, userId));
+    const { error } = await this.supabase
+      .from('daily_missions')
+      .upsert(rows, { onConflict: 'user_id, date, id' });
+    if (error) throw new PersistenceError(`Erro ao persistir missões diárias: ${error.message}`, error);
   }
 
   async persistGamification(
@@ -464,7 +540,7 @@ export class SupabaseStudyRepository {
     dailyMissionsMap?: Record<string, DailyMission[]>
   ): Promise<void> {
     // 1. Profile
-    await this.supabase.from('gamification_profiles').upsert({
+    const { error: profErr } = await this.supabase.from('gamification_profiles').upsert({
       user_id: userId,
       total_xp: profile.total_xp,
       level: profile.level,
@@ -476,6 +552,7 @@ export class SupabaseStudyRepository {
       current_week_start: profile.current_week_start,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
+    if (profErr) throw new PersistenceError(`Erro ao persistir gamification profile: ${profErr.message}`, profErr);
 
     // 2. XP Transactions (Idempotente via unique constraint)
     if (xpTransactions.length > 0) {
@@ -490,9 +567,10 @@ export class SupabaseStudyRepository {
         description: tx.description,
         created_at: tx.created_at,
       }));
-      await this.supabase.from('xp_transactions').upsert(txRows, {
+      const { error: txErr } = await this.supabase.from('xp_transactions').upsert(txRows, {
         onConflict: 'user_id, rule_id, source_event_id',
       });
+      if (txErr) throw new PersistenceError(`Erro ao persistir xp transactions: ${txErr.message}`, txErr);
     }
 
     // 3. User Achievements
@@ -501,45 +579,22 @@ export class SupabaseStudyRepository {
         user_id: userId,
         achievement_id: achId,
       }));
-      await this.supabase.from('user_achievements').upsert(achRows, {
+      const { error: achErr } = await this.supabase.from('user_achievements').upsert(achRows, {
         onConflict: 'user_id, achievement_id',
       });
+      if (achErr) throw new PersistenceError(`Erro ao persistir user achievements: ${achErr.message}`, achErr);
     }
 
     // 4. Daily missions if provided
     if (dailyMissionsMap) {
-      const allMissions: any[] = [];
+      const allMissions: DailyMission[] = [];
       for (const date of Object.keys(dailyMissionsMap)) {
         for (const m of dailyMissionsMap[date]) {
-          allMissions.push({
-            user_id: userId,
-            id: m.id,
-            date: m.date,
-            type: m.type,
-            title: m.title,
-            description: m.description,
-            topic_id: m.topic_id || null,
-            subject_id: m.subject_id || null,
-            target_value: m.target_value,
-            current_value: m.current_value,
-            unit: m.unit,
-            xp_reward: m.xp_reward,
-            status: m.status,
-            reason: m.reason,
-            source: m.source,
-            is_main: m.is_main || false,
-            is_executable: m.is_executable !== false,
-            cta_url: m.cta_url || null,
-            cta_label: m.cta_label || null,
-            created_at: m.created_at,
-            completed_at: m.completed_at || null,
-          });
+          allMissions.push(m);
         }
       }
       if (allMissions.length > 0) {
-        await this.supabase.from('daily_missions').upsert(allMissions, {
-          onConflict: 'user_id, id',
-        });
+        await this.persistDailyMissions(userId, allMissions);
       }
     }
   }
@@ -554,8 +609,13 @@ export class SupabaseStudyRepository {
       memory_daily_minutes: settings.memory_daily_minutes,
       desired_retention: settings.desired_retention,
       today_available_minutes: settings.today_available_minutes,
+      gamification_show_animations: settings.gamification_show_animations !== false,
+      gamification_show_xp_toast: settings.gamification_show_xp_toast !== false,
+      gamification_show_streak: settings.gamification_show_streak !== false,
+      gamification_weekly_target_days: settings.gamification_weekly_target_days || 5,
+      updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' });
-    if (error) console.error('Erro ao persistir settings:', error.message);
+    if (error) throw new PersistenceError(`Erro ao persistir settings: ${error.message}`, error);
   }
 
   async persistEvent(userId: string, ev: StudyEvent): Promise<void> {
@@ -568,7 +628,7 @@ export class SupabaseStudyRepository {
       payload: ev.payload,
       created_at: ev.created_at,
     }, { onConflict: 'user_id, id' });
-    if (error) console.error('Erro ao persistir study event:', error.message);
+    if (error) throw new PersistenceError(`Erro ao persistir study event: ${error.message}`, error);
   }
 
   // ==========================================================================
@@ -587,11 +647,12 @@ export class SupabaseStudyRepository {
   }
 
   async markV3ImportCompleted(userId: string, metadata: Record<string, unknown> = {}): Promise<void> {
-    await this.supabase.from('user_migrations').upsert({
+    const { error } = await this.supabase.from('user_migrations').upsert({
       user_id: userId,
       migration_key: 'local_store_v3_import',
       completed_at: new Date().toISOString(),
       metadata,
     }, { onConflict: 'user_id, migration_key' });
+    if (error) throw new PersistenceError(`Erro ao marcar import V3: ${error.message}`, error);
   }
 }

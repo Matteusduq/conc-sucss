@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useModal } from '@/components/layout/DashboardLayoutClient';
 import { ExamCountdown } from '@/components/dashboard/ExamCountdown';
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs';
@@ -21,7 +21,7 @@ import { getLocalDateString } from '@/lib/utils/date';
 
 export default function HojePage() {
   const router = useRouter();
-  const { store, openTecModal } = useModal();
+  const { store, openTecModal, updateStore } = useModal();
 
   const dueCards = getDueFlashcards(store);
   const plan = generateDailyPlan({
@@ -72,6 +72,23 @@ export default function HojePage() {
   // Gamification state
   const todayStr = getLocalDateString();
   const { missions } = getOrCreateDailyMissions(todayStr, store);
+
+  useEffect(() => {
+    if (!store.dailyMissions[todayStr] || store.dailyMissions[todayStr].length === 0) {
+      updateStore(
+        (prev) => ({
+          ...prev,
+          dailyMissions: {
+            ...prev.dailyMissions,
+            [todayStr]: missions,
+          },
+        }),
+        async (repo, uId) => {
+          await repo.persistDailyMissions(uId, missions);
+        }
+      );
+    }
+  }, [todayStr, store.dailyMissions, missions, updateStore]);
   const completedMissionsCount = missions.filter((m) => m.status === 'COMPLETED').length;
   const profile = store.gamificationProfile || { total_xp: 0, level: 1, current_streak: 0, longest_streak: 0 };
   const { level, progressPercent } = getLevelProgress(profile.total_xp);

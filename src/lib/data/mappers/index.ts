@@ -52,6 +52,7 @@ export function mapExamFromDb(row: Record<string, unknown>): Exam {
     p3_max_points: row.p3_max_points != null ? Number(row.p3_max_points) : undefined,
     p3_min_points: row.p3_min_points != null ? Number(row.p3_min_points) : undefined,
     official_notice_date: row.official_notice_date ? String(row.official_notice_date) : undefined,
+    tiebreaker_rules: Array.isArray(row.tiebreaker_rules) ? (row.tiebreaker_rules as string[]) : [],
     created_at: String(row.created_at || new Date().toISOString()),
     updated_at: String(row.updated_at || new Date().toISOString()),
   };
@@ -110,7 +111,7 @@ export function mapTopicFromDb(row: Record<string, unknown>): Topic {
     priority_source: row.priority_source ? String(row.priority_source) : null,
     priority_basis: (row.priority_basis ? String(row.priority_basis) : undefined) as Topic['priority_basis'],
     priority_confidence: (row.priority_confidence ? String(row.priority_confidence) : undefined) as Topic['priority_confidence'],
-    cross_relevance: (row.cross_relevance ? String(row.cross_relevance) : undefined) as Topic['cross_relevance'],
+    cross_relevance: (row.cross_relevance ? String(row.cross_relevance) : 'NONE') as Topic['cross_relevance'],
     discursive_eligible: Boolean(row.discursive_eligible),
     is_discursive_relevant: Boolean(row.is_discursive_relevant),
     discursive_synergy: (row.discursive_synergy ? String(row.discursive_synergy) : 'NONE') as Topic['discursive_synergy'],
@@ -138,7 +139,7 @@ export function mapSyllabusItemFromDb(row: Record<string, unknown>): SyllabusIte
     exam_block_id: String(row.exam_block_id),
     subject_id: String(row.subject_id),
     parent_item_id: row.parent_item_id ? String(row.parent_item_id) : null,
-    official_code: String(row.official_code),
+    official_code: row.official_code ? String(row.official_code) : null,
     official_text: String(row.official_text),
     display_order: Number(row.display_order || 0),
     active: Boolean(row.active),
@@ -246,7 +247,7 @@ export function mapErrorLogFromDb(row: Record<string, unknown>): ErrorLog {
     question_session_id: row.question_session_id ? String(row.question_session_id) : null,
     error_type: String(row.error_type) as ErrorLog['error_type'],
     summary: String(row.summary),
-    correct_rule: String(row.correct_rule),
+    correct_rule: row.correct_rule != null ? String(row.correct_rule) : null,
     personal_note: row.personal_note ? String(row.personal_note) : null,
     severity: String(row.severity || 'MEDIUM') as ErrorLog['severity'],
     resolved: Boolean(row.resolved),
@@ -302,7 +303,7 @@ export function mapFlashcardReviewFromDb(row: Record<string, unknown>): Flashcar
     user_id: String(row.user_id),
     flashcard_id: String(row.flashcard_id),
     reviewed_at: String(row.reviewed_at),
-    rating: Number(row.rating) as unknown as FlashcardReview['rating'],
+    rating: String(row.rating) as FlashcardReview['rating'],
     response_time_ms: row.response_time_ms != null ? Number(row.response_time_ms) : null,
     state_before: (row.state_before as Record<string, unknown>) || {},
     state_after: (row.state_after as Record<string, unknown>) || {},
@@ -344,6 +345,10 @@ export function mapUserStudySettingsFromDb(row: Record<string, unknown>): UserSt
     memory_daily_minutes: Number(row.memory_daily_minutes || 20),
     desired_retention: Number(row.desired_retention || 0.90),
     today_available_minutes: row.today_available_minutes != null ? Number(row.today_available_minutes) : null,
+    gamification_show_animations: row.gamification_show_animations !== false,
+    gamification_show_xp_toast: row.gamification_show_xp_toast !== false,
+    gamification_show_streak: row.gamification_show_streak !== false,
+    gamification_weekly_target_days: Number(row.gamification_weekly_target_days || 5),
     updated_at: String(row.updated_at),
   };
 }
@@ -353,21 +358,21 @@ export function mapMockExamFromDb(row: Record<string, unknown>): MockExam {
     id: String(row.id),
     user_id: String(row.user_id),
     exam_id: String(row.exam_id),
-    type: String(row.type) as MockExam['type'],
+    type: (row.type ? String(row.type) : 'WEEKLY_CHECKPOINT') as MockExam['type'],
     performed_at: String(row.performed_at),
     total_questions: Number(row.total_questions),
     correct: Number(row.correct),
     wrong: Number(row.wrong),
     blank: Number(row.blank),
     net_points: Number(row.net_points),
-    p1_correct: Number(row.p1_correct),
-    p1_wrong: Number(row.p1_wrong),
-    p1_blank: Number(row.p1_blank),
-    p1_net: Number(row.p1_net),
-    p2_correct: Number(row.p2_correct),
-    p2_wrong: Number(row.p2_wrong),
-    p2_blank: Number(row.p2_blank),
-    p2_net: Number(row.p2_net),
+    p1_correct: Number(row.p1_correct || 0),
+    p1_wrong: Number(row.p1_wrong || 0),
+    p1_blank: Number(row.p1_blank || 0),
+    p1_net: Number(row.p1_net || 0),
+    p2_correct: Number(row.p2_correct || 0),
+    p2_wrong: Number(row.p2_wrong || 0),
+    p2_blank: Number(row.p2_blank || 0),
+    p2_net: Number(row.p2_net || 0),
     duration_seconds: row.duration_seconds != null ? Number(row.duration_seconds) : null,
     notes: row.notes ? String(row.notes) : null,
     created_at: String(row.created_at),
@@ -438,5 +443,185 @@ export function mapDailyMissionFromDb(row: Record<string, unknown>): DailyMissio
     cta_label: row.cta_label ? String(row.cta_label) : undefined,
     created_at: String(row.created_at),
     completed_at: row.completed_at ? String(row.completed_at) : undefined,
+  };
+}
+
+// ============================================================================
+// CONVERSÕES DOMÍNIO -> DB
+// ============================================================================
+
+export function mapExamToDb(exam: Exam): Record<string, unknown> {
+  return {
+    id: exam.id,
+    user_id: exam.user_id,
+    name: exam.name,
+    institution: exam.institution,
+    role: exam.role,
+    exam_board: exam.exam_board,
+    exam_date: exam.exam_date,
+    question_model: exam.question_model,
+    correct_points: exam.correct_points,
+    wrong_points: exam.wrong_points,
+    blank_points: exam.blank_points,
+    active: exam.active,
+    objective_duration_minutes: exam.objective_duration_minutes ?? 300,
+    discursive_duration_minutes: exam.discursive_duration_minutes ?? 180,
+    p1_items: exam.p1_items ?? 90,
+    p2_items: exam.p2_items ?? 90,
+    p1_min_points: exam.p1_min_points ?? 18,
+    p2_min_points: exam.p2_min_points ?? 27,
+    objective_total_min_points: exam.objective_total_min_points ?? 54,
+    p3_max_points: exam.p3_max_points ?? 60,
+    p3_min_points: exam.p3_min_points ?? 30,
+    official_notice_date: exam.official_notice_date ?? '2026-10-02',
+    tiebreaker_rules: exam.tiebreaker_rules ?? [],
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function mapExamBlockToDb(block: ExamBlock): Record<string, unknown> {
+  return {
+    id: block.id,
+    user_id: block.user_id,
+    exam_id: block.exam_id,
+    code: block.code,
+    name: block.name,
+    block_type: block.block_type,
+    total_items: block.total_items,
+    max_points: block.max_points,
+    minimum_points: block.minimum_points,
+    duration_minutes: block.duration_minutes,
+    display_order: block.display_order,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function mapTopicToDb(topic: Topic): Record<string, unknown> {
+  return {
+    id: topic.id,
+    user_id: topic.user_id,
+    exam_id: topic.exam_id,
+    subject_id: topic.subject_id,
+    exam_block_id: topic.exam_block_id,
+    exam_block_code: topic.exam_block_code,
+    parent_topic_id: topic.parent_topic_id,
+    name: topic.name,
+    slug: topic.slug,
+    description: topic.description,
+    priority: topic.priority,
+    priority_label: topic.priority_label,
+    priority_weight: topic.priority_weight,
+    priority_source: topic.priority_source,
+    priority_basis: topic.priority_basis,
+    priority_confidence: topic.priority_confidence,
+    cross_relevance: topic.cross_relevance || 'NONE',
+    discursive_eligible: topic.discursive_eligible ?? false,
+    is_discursive_relevant: topic.is_discursive_relevant ?? false,
+    discursive_synergy: topic.discursive_synergy || 'NONE',
+    recommended_material_type: topic.recommended_material_type || 'SIMPLIFIED_PDF',
+    status: topic.status,
+    display_order: topic.display_order,
+    estimated_minutes: topic.estimated_minutes,
+    domain_score: topic.domain_score,
+    domain_confidence: topic.domain_confidence || 'NONE',
+    study_score: topic.study_score,
+    starter_rank: topic.starter_rank,
+    last_studied_at: topic.last_studied_at,
+    next_recommended_at: topic.next_recommended_at,
+    tec_filter_hint: topic.tec_filter_hint,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function mapErrorLogToDb(err: ErrorLog): Record<string, unknown> {
+  return {
+    id: err.id,
+    user_id: err.user_id,
+    exam_id: err.exam_id,
+    subject_id: err.subject_id,
+    topic_id: err.topic_id,
+    question_session_id: err.question_session_id,
+    error_type: err.error_type,
+    summary: err.summary,
+    correct_rule: err.correct_rule,
+    personal_note: err.personal_note,
+    severity: err.severity,
+    resolved: err.resolved,
+    resolved_at: err.resolved_at,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function mapFlashcardReviewToDb(review: FlashcardReview): Record<string, unknown> {
+  return {
+    id: review.id,
+    user_id: review.user_id,
+    flashcard_id: review.flashcard_id,
+    reviewed_at: review.reviewed_at,
+    rating: review.rating,
+    response_time_ms: review.response_time_ms,
+    state_before: review.state_before,
+    state_after: review.state_after,
+    fsrs_log: review.fsrs_log,
+    was_due_at_review: review.was_due_at_review !== false,
+  };
+}
+
+export function mapUserStudySettingsToDb(settings: UserStudySettings): Record<string, unknown> {
+  return {
+    user_id: settings.user_id,
+    weekly_study_target_minutes: settings.weekly_study_target_minutes,
+    default_high_questions: settings.default_high_questions,
+    default_medium_questions: settings.default_medium_questions,
+    default_low_questions: settings.default_low_questions,
+    memory_daily_minutes: settings.memory_daily_minutes,
+    desired_retention: settings.desired_retention,
+    today_available_minutes: settings.today_available_minutes,
+    gamification_show_animations: settings.gamification_show_animations !== false,
+    gamification_show_xp_toast: settings.gamification_show_xp_toast !== false,
+    gamification_show_streak: settings.gamification_show_streak !== false,
+    gamification_weekly_target_days: settings.gamification_weekly_target_days || 5,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function mapDailyMissionToDb(mission: DailyMission, userId: string): Record<string, unknown> {
+  return {
+    user_id: userId,
+    id: mission.id,
+    date: mission.date,
+    type: mission.type,
+    title: mission.title,
+    description: mission.description,
+    topic_id: mission.topic_id || null,
+    subject_id: mission.subject_id || null,
+    target_value: mission.target_value,
+    current_value: mission.current_value,
+    unit: mission.unit,
+    xp_reward: mission.xp_reward,
+    status: mission.status,
+    reason: mission.reason,
+    source: mission.source,
+    is_main: mission.is_main || false,
+    is_executable: mission.is_executable !== false,
+    cta_url: mission.cta_url || null,
+    cta_label: mission.cta_label || null,
+    created_at: mission.created_at,
+    completed_at: mission.completed_at || null,
+  };
+}
+
+export function mapGamificationProfileToDb(profile: GamificationProfile): Record<string, unknown> {
+  return {
+    user_id: profile.user_id,
+    total_xp: profile.total_xp,
+    level: profile.level,
+    current_streak: profile.current_streak,
+    longest_streak: profile.longest_streak,
+    meaningful_days: profile.meaningful_days,
+    last_meaningful_study_date: profile.last_meaningful_study_date,
+    weekly_consistency_days: profile.weekly_consistency_days,
+    current_week_start: profile.current_week_start,
+    updated_at: new Date().toISOString(),
   };
 }

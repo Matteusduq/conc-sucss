@@ -83,7 +83,8 @@ export default function EstudarPage({ params }: { params: Promise<{ topicId: str
           uId,
           nextStore.gamificationProfile,
           nextStore.xpTransactions,
-          nextStore.unlockedAchievements
+          nextStore.unlockedAchievements,
+          nextStore.dailyMissions
         );
       }
     );

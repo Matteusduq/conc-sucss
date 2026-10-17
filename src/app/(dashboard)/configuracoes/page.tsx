@@ -64,6 +64,10 @@ export default function ConfiguracoesPage() {
       () => updatedStore,
       async (repo, uId) => {
         await repo.persistSettings(uId, updatedSettings);
+        await repo.updateExam(uId, {
+          id: updatedStore.exam.id,
+          exam_date: examDate,
+        });
       }
     );
 
@@ -86,22 +90,22 @@ export default function ConfiguracoesPage() {
       </div>
 
       {/* Backend & Supabase Status Card */}
-      <Card className="p-5 border-indigo-500/30 bg-indigo-950/10 space-y-3">
+      <Card className={`p-5 space-y-3 ${user ? 'border-indigo-500/30 bg-indigo-950/10' : 'border-zinc-800 bg-zinc-900/30'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <div className={`w-2.5 h-2.5 rounded-full ${user ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
             <span className="text-sm font-semibold text-white">
-              Backend Supabase Conectado
+              {user ? 'Backend Supabase Conectado' : 'Aguardando Login Supabase'}
             </span>
           </div>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-            Sincronização Ativa
+          <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${user ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'}`}>
+            {user ? 'Sincronização Ativa' : 'Modo Offline'}
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-1 text-zinc-300">
           <div>
             <span className="text-zinc-500 block text-[11px]">Conta Autenticada</span>
-            <span className="font-mono text-zinc-200">{userEmail || 'Usuário Local'}</span>
+            <span className="font-mono text-zinc-200">{userEmail || 'Nenhum usuário logado'}</span>
           </div>
           <div>
             <span className="text-zinc-500 block text-[11px]">Projeto Supabase</span>

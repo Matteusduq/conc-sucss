@@ -53,7 +53,8 @@ export default function MemoriaPage() {
                   uId,
                   nextStore.gamificationProfile,
                   nextStore.xpTransactions,
-                  nextStore.unlockedAchievements
+                  nextStore.unlockedAchievements,
+                  nextStore.dailyMissions
                 );
               }
             );

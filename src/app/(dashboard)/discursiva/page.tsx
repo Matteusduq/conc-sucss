@@ -51,7 +51,8 @@ export default function DiscursivePage() {
           uId,
           nextStore.gamificationProfile,
           nextStore.xpTransactions,
-          nextStore.unlockedAchievements
+          nextStore.unlockedAchievements,
+          nextStore.dailyMissions
         );
       }
     );
@@ -60,7 +61,12 @@ export default function DiscursivePage() {
   const handleDeleteSession = async (id: string) => {
     if (confirm('Deseja excluir este registro de treino discursivo?')) {
       const nextStore = deleteDiscursiveSessionAction(id, store);
-      await updateStore(() => nextStore);
+      await updateStore(
+        () => nextStore,
+        async (repo, uId) => {
+          await repo.deleteDiscursiveSession(uId, id);
+        }
+      );
     }
   };
 

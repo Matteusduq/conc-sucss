@@ -10,15 +10,16 @@ import {
 } from './seed';
 
 /**
- * Bootstrap curricular idempotente para um novo usuário autenticado.
+ * Bootstrap curricular 100% idempotente para um novo usuário autenticado.
  * Transforma `local-user` em `userId = auth.uid()` preservando rigorosamente:
  * - 76 Topics (42 P1 + 34 P2)
  * - 182 SyllabusItems (103 P1 + 79 P2)
  * - starter_rank (1 a 8)
  * - StudyScore inicial
  * - Estrutura de blocos e disciplinas
- * - Materiais em status PENDING
+ * - 76 Materiais em status PENDING
  * - GamificationProfile zerado (0 XP, 0 Streak)
+ * - Marcador atômico em user_migrations: 'curriculum_bootstrap_v1'
  */
 export async function ensureUserStudyData(
   userId: string,
@@ -29,19 +30,16 @@ export async function ensureUserStudyData(
   }
 
   try {
-    // 1. Verifica se os tópicos já foram bootstrapados para este usuário
-    const { count, error: checkError } = await supabase
-      .from('topics')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId);
+    // 1. Verifica se a migração curriculum_bootstrap_v1 já foi concluída
+    const { data: migrationRecord, error: migCheckError } = await supabase
+      .from('user_migrations')
+      .select('migration_key')
+      .eq('user_id', userId)
+      .eq('migration_key', 'curriculum_bootstrap_v1')
+      .maybeSingle();
 
-    if (checkError) {
-      console.error('Erro ao verificar tópicos do usuário:', checkError);
-      return { success: false, created: false, error: checkError.message };
-    }
-
-    if (count && count >= 76) {
-      // Usuário já possui estrutura completa inicializada
+    if (!migCheckError && migrationRecord) {
+      // Usuário já possui bootstrap 100% verificado e gravado
       return { success: true, created: false };
     }
 
@@ -56,7 +54,7 @@ export async function ensureUserStudyData(
       },
       { onConflict: 'id' }
     );
-    if (profileError) console.warn('Erro ao criar profile:', profileError.message);
+    if (profileError) throw profileError;
 
     // 3. User Study Settings
     const { error: settingsError } = await supabase.from('user_study_settings').upsert(
@@ -75,7 +73,7 @@ export async function ensureUserStudyData(
       },
       { onConflict: 'user_id' }
     );
-    if (settingsError) console.warn('Erro ao criar settings:', settingsError.message);
+    if (settingsError) throw settingsError;
 
     // 4. Exam
     const { error: examError } = await supabase.from('exams').upsert(
@@ -102,12 +100,13 @@ export async function ensureUserStudyData(
         p3_max_points: SEED_EXAM.p3_max_points || 60,
         p3_min_points: SEED_EXAM.p3_min_points || 30,
         official_notice_date: SEED_EXAM.official_notice_date || '2026-10-02',
+        tiebreaker_rules: SEED_EXAM.tiebreaker_rules || [],
       },
       { onConflict: 'user_id, id' }
     );
     if (examError) throw examError;
 
-    // 5. Exam Blocks (P1, P2, P3)
+    // 5. Exam Blocks (P1, P2, P3 com P3 total_items null)
     const blocksData = SEED_EXAM_BLOCKS.map((b) => ({
       user_id: userId,
       id: b.id,
@@ -144,7 +143,7 @@ export async function ensureUserStudyData(
     });
     if (subjectsError) throw subjectsError;
 
-    // 7. Topics (76 Topics) em chunks para evitar excesso de payload
+    // 7. Topics (76 Topics com cross_relevance e starter_rank)
     const topicsData = SEED_TOPICS.map((t) => ({
       user_id: userId,
       id: t.id,
@@ -162,16 +161,16 @@ export async function ensureUserStudyData(
       priority_source: t.priority_source,
       priority_basis: t.priority_basis,
       priority_confidence: t.priority_confidence,
-      cross_relevance: t.cross_relevance,
-      discursive_eligible: t.discursive_eligible,
-      is_discursive_relevant: t.is_discursive_relevant,
-      discursive_synergy: t.discursive_synergy,
-      recommended_material_type: t.recommended_material_type,
+      cross_relevance: t.cross_relevance || 'NONE',
+      discursive_eligible: t.discursive_eligible ?? false,
+      is_discursive_relevant: t.is_discursive_relevant ?? false,
+      discursive_synergy: t.discursive_synergy || 'NONE',
+      recommended_material_type: t.recommended_material_type || 'SIMPLIFIED_PDF',
       status: t.status,
       display_order: t.display_order,
       estimated_minutes: t.estimated_minutes,
       domain_score: t.domain_score,
-      domain_confidence: t.domain_confidence,
+      domain_confidence: t.domain_confidence || 'NONE',
       study_score: t.study_score,
       starter_rank: t.starter_rank,
       last_studied_at: t.last_studied_at,
@@ -187,7 +186,7 @@ export async function ensureUserStudyData(
       if (topicsError) throw topicsError;
     }
 
-    // 8. Syllabus Items (182 itens) em chunks
+    // 8. Syllabus Items (182 itens oficiais)
     const syllabusData = SEED_SYLLABUS_ITEMS.map((item) => ({
       user_id: userId,
       id: item.id,
@@ -209,7 +208,7 @@ export async function ensureUserStudyData(
       if (sylError) throw sylError;
     }
 
-    // 9. Topic Syllabus Items (mapeamentos) em chunks
+    // 9. Topic Syllabus Items (mapeamentos N:M)
     const topicSylData = SEED_TOPIC_SYLLABUS_ITEMS.map((tsi) => ({
       user_id: userId,
       topic_id: tsi.topic_id,
@@ -224,7 +223,7 @@ export async function ensureUserStudyData(
       if (tsiError) throw tsiError;
     }
 
-    // 10. Study Materials placeholders (PENDING) em chunks
+    // 10. Study Materials placeholders (76 PENDING placeholders)
     const materialsData = SEED_MATERIALS.map((m) => ({
       user_id: userId,
       id: m.id,
@@ -264,7 +263,25 @@ export async function ensureUserStudyData(
       },
       { onConflict: 'user_id' }
     );
-    if (gamError) console.warn('Erro ao inicializar gamification_profile:', gamError.message);
+    if (gamError) throw gamError;
+
+    // 12. Marcador Explícito de Bootstrap concluído com sucesso
+    const { error: migRecordError } = await supabase.from('user_migrations').upsert(
+      {
+        user_id: userId,
+        migration_key: 'curriculum_bootstrap_v1',
+        completed_at: new Date().toISOString(),
+        metadata: {
+          topics_count: topicsData.length,
+          syllabus_count: syllabusData.length,
+          materials_count: materialsData.length,
+          p1_topics: topicsData.filter((t) => t.exam_block_code === 'P1').length,
+          p2_topics: topicsData.filter((t) => t.exam_block_code === 'P2').length,
+        },
+      },
+      { onConflict: 'user_id, migration_key' }
+    );
+    if (migRecordError) throw migRecordError;
 
     return { success: true, created: true };
   } catch (err: unknown) {

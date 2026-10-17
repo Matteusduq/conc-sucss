@@ -1,5 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { AppStoreData, STORAGE_KEY_V3 } from './store';
+import { mapDailyMissionToDb } from './mappers';
+import { DailyMission } from '@/lib/gamification/types';
 
 export interface V3MigrationResult {
   success: boolean;
@@ -14,6 +16,7 @@ export interface V3MigrationResult {
     discursiveSessions: number;
     mockExams: number;
     xp: number;
+    dailyMissions: number;
   };
 }
 
@@ -49,7 +52,7 @@ export function getLocalV3DataToImport(): AppStoreData | null {
 
 /**
  * Importa o histórico da V3 local para a conta remota no Supabase.
- * - Idempotente (usa onConflict: 'user_id, id' em todas as coleções)
+ * - Idempotente (usa onConflict em todas as coleções)
  * - Transforma todo user_id para auth.uid()
  * - Preserva estritamente IDs textuais, scores, FSRS, reviews, sessões de estudo
  */
@@ -80,7 +83,8 @@ export async function importV3DataToSupabase(
         priority: t.priority,
         priority_weight: t.priority_weight,
       }));
-      await supabase.from('topics').upsert(topicUpdates, { onConflict: 'user_id, id' });
+      const { error: tErr } = await supabase.from('topics').upsert(topicUpdates, { onConflict: 'user_id, id' });
+      if (tErr) throw tErr;
     }
 
     // 2. Material Progress
@@ -102,7 +106,8 @@ export async function importV3DataToSupabase(
         notes_by_page: p.notes_by_page || {},
         bookmarks: p.bookmarks || [],
       }));
-      await supabase.from('material_progress').upsert(progRows, { onConflict: 'user_id, material_id' });
+      const { error: mpErr } = await supabase.from('material_progress').upsert(progRows, { onConflict: 'user_id, material_id' });
+      if (mpErr) throw mpErr;
     }
 
     // 3. Study Sessions
@@ -121,7 +126,8 @@ export async function importV3DataToSupabase(
         duration_seconds: s.duration_seconds,
         notes: s.notes,
       }));
-      await supabase.from('study_sessions').upsert(sessRows, { onConflict: 'user_id, id' });
+      const { error: ssErr } = await supabase.from('study_sessions').upsert(sessRows, { onConflict: 'user_id, id' });
+      if (ssErr) throw ssErr;
     }
 
     // 4. Question Sessions
@@ -146,7 +152,8 @@ export async function importV3DataToSupabase(
         net_rate: q.net_rate,
         had_conceptual_error: q.had_conceptual_error,
       }));
-      await supabase.from('question_sessions').upsert(qRows, { onConflict: 'user_id, id' });
+      const { error: qsErr } = await supabase.from('question_sessions').upsert(qRows, { onConflict: 'user_id, id' });
+      if (qsErr) throw qsErr;
     }
 
     // 5. Error Logs
@@ -167,7 +174,8 @@ export async function importV3DataToSupabase(
         resolved: e.resolved,
         resolved_at: e.resolved_at,
       }));
-      await supabase.from('error_logs').upsert(errRows, { onConflict: 'user_id, id' });
+      const { error: elErr } = await supabase.from('error_logs').upsert(errRows, { onConflict: 'user_id, id' });
+      if (elErr) throw elErr;
     }
 
     // 6. Flashcards
@@ -190,7 +198,8 @@ export async function importV3DataToSupabase(
         active: c.active,
         suspended: c.suspended,
       }));
-      await supabase.from('flashcards').upsert(cardRows, { onConflict: 'user_id, id' });
+      const { error: fcErr } = await supabase.from('flashcards').upsert(cardRows, { onConflict: 'user_id, id' });
+      if (fcErr) throw fcErr;
     }
 
     // 7. FSRS State
@@ -210,7 +219,8 @@ export async function importV3DataToSupabase(
         state: f.state || 0,
         last_review: f.last_review,
       }));
-      await supabase.from('flashcard_fsrs_state').upsert(fsrsRows, { onConflict: 'user_id, flashcard_id' });
+      const { error: fsrsErr } = await supabase.from('flashcard_fsrs_state').upsert(fsrsRows, { onConflict: 'user_id, flashcard_id' });
+      if (fsrsErr) throw fsrsErr;
     }
 
     // 8. Reviews
@@ -228,7 +238,8 @@ export async function importV3DataToSupabase(
         fsrs_log: r.fsrs_log,
         was_due_at_review: r.was_due_at_review !== false,
       }));
-      await supabase.from('flashcard_reviews').upsert(revRows, { onConflict: 'user_id, id' });
+      const { error: rErr } = await supabase.from('flashcard_reviews').upsert(revRows, { onConflict: 'user_id, id' });
+      if (rErr) throw rErr;
     }
 
     // 9. Discursive Sessions
@@ -251,7 +262,8 @@ export async function importV3DataToSupabase(
         calculated_score: d.calculated_score,
         notes: d.notes,
       }));
-      await supabase.from('discursive_sessions').upsert(discRows, { onConflict: 'user_id, id' });
+      const { error: discErr } = await supabase.from('discursive_sessions').upsert(discRows, { onConflict: 'user_id, id' });
+      if (discErr) throw discErr;
     }
 
     // 10. Mock Exams
@@ -279,7 +291,8 @@ export async function importV3DataToSupabase(
         duration_seconds: m.duration_seconds,
         notes: m.notes,
       }));
-      await supabase.from('mock_exams').upsert(mockRows, { onConflict: 'user_id, id' });
+      const { error: meErr } = await supabase.from('mock_exams').upsert(mockRows, { onConflict: 'user_id, id' });
+      if (meErr) throw meErr;
     }
 
     // 11. Study Events
@@ -294,13 +307,14 @@ export async function importV3DataToSupabase(
         payload: e.payload,
         created_at: e.created_at,
       }));
-      await supabase.from('study_events').upsert(evRows, { onConflict: 'user_id, id' });
+      const { error: seErr } = await supabase.from('study_events').upsert(evRows, { onConflict: 'user_id, id' });
+      if (seErr) throw seErr;
     }
 
     // 12. Gamification Profile & XP
     if (v3Data.gamificationProfile) {
       const g = v3Data.gamificationProfile;
-      await supabase.from('gamification_profiles').upsert({
+      const { error: gpErr } = await supabase.from('gamification_profiles').upsert({
         user_id: userId,
         total_xp: g.total_xp,
         level: g.level,
@@ -312,6 +326,7 @@ export async function importV3DataToSupabase(
         current_week_start: g.current_week_start,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
+      if (gpErr) throw gpErr;
     }
 
     const xpTransactions = v3Data.xpTransactions || [];
@@ -327,7 +342,8 @@ export async function importV3DataToSupabase(
         description: tx.description,
         created_at: tx.created_at,
       }));
-      await supabase.from('xp_transactions').upsert(txRows, { onConflict: 'user_id, rule_id, source_event_id' });
+      const { error: xpErr } = await supabase.from('xp_transactions').upsert(txRows, { onConflict: 'user_id, rule_id, source_event_id' });
+      if (xpErr) throw xpErr;
     }
 
     const achievements = v3Data.unlockedAchievements || [];
@@ -336,13 +352,30 @@ export async function importV3DataToSupabase(
         user_id: userId,
         achievement_id: achId,
       }));
-      await supabase.from('user_achievements').upsert(achRows, { onConflict: 'user_id, achievement_id' });
+      const { error: achErr } = await supabase.from('user_achievements').upsert(achRows, { onConflict: 'user_id, achievement_id' });
+      if (achErr) throw achErr;
     }
 
-    // 13. Settings
+    // 13. Daily Missions
+    let totalMissionsImported = 0;
+    const missionsMap = v3Data.dailyMissions || {};
+    const allMissions: DailyMission[] = [];
+    for (const date of Object.keys(missionsMap)) {
+      for (const m of missionsMap[date]) {
+        allMissions.push(m);
+      }
+    }
+    if (allMissions.length > 0) {
+      totalMissionsImported = allMissions.length;
+      const mRows = allMissions.map((m) => mapDailyMissionToDb(m, userId));
+      const { error: misErr } = await supabase.from('daily_missions').upsert(mRows, { onConflict: 'user_id, date, id' });
+      if (misErr) throw misErr;
+    }
+
+    // 14. Settings
     if (v3Data.settings) {
       const s = v3Data.settings;
-      await supabase.from('user_study_settings').upsert({
+      const { error: setErr } = await supabase.from('user_study_settings').upsert({
         user_id: userId,
         weekly_study_target_minutes: s.weekly_study_target_minutes,
         default_high_questions: s.default_high_questions,
@@ -351,11 +384,17 @@ export async function importV3DataToSupabase(
         memory_daily_minutes: s.memory_daily_minutes,
         desired_retention: s.desired_retention,
         today_available_minutes: s.today_available_minutes,
+        gamification_show_animations: s.gamification_show_animations !== false,
+        gamification_show_xp_toast: s.gamification_show_xp_toast !== false,
+        gamification_show_streak: s.gamification_show_streak !== false,
+        gamification_weekly_target_days: s.gamification_weekly_target_days || 5,
+        updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
+      if (setErr) throw setErr;
     }
 
-    // 14. Registra conclusão da migração no backend
-    await supabase.from('user_migrations').upsert({
+    // 15. Registra conclusão da migração no backend
+    const { error: migErr } = await supabase.from('user_migrations').upsert({
       user_id: userId,
       migration_key: 'local_store_v3_import',
       completed_at: new Date().toISOString(),
@@ -363,11 +402,13 @@ export async function importV3DataToSupabase(
         questionSessionsCount: questionSessions.length,
         studySessionsCount: studySessions.length,
         flashcardsCount: flashcards.length,
+        dailyMissionsCount: totalMissionsImported,
         totalXp: v3Data.gamificationProfile?.total_xp || 0,
       },
     }, { onConflict: 'user_id, migration_key' });
+    if (migErr) throw migErr;
 
-    // 15. Marca timestamp no localStorage (sem deletar os dados brutos de backup)
+    // 16. Marca timestamp no localStorage (sem deletar os dados brutos de backup)
     if (typeof window !== 'undefined') {
       localStorage.setItem('conc_store_v3_imported_at', new Date().toISOString());
     }
@@ -384,6 +425,7 @@ export async function importV3DataToSupabase(
         discursiveSessions: discursiveSessions.length,
         mockExams: mockExams.length,
         xp: v3Data.gamificationProfile?.total_xp || 0,
+        dailyMissions: totalMissionsImported,
       },
     };
   } catch (err: unknown) {

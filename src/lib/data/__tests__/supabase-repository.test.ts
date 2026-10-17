@@ -8,19 +8,25 @@ describe('FASE 3 — SUPABASE REPOSITORY & DATA MIGRATION', () => {
   const userId = 'user-test-uuid-1234';
 
   it('1. Bootstrap curricular: cria exatamente 76 tópicos e 182 syllabus items idempotentemente', async () => {
-    const insertedTables: Record<string, any[]> = {};
-
+    const dbMock: Record<string, any[]> = {};
     const mockSupabase: any = {
       from: vi.fn((table: string) => ({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({ count: 0, error: null }),
-        }),
+        select: vi.fn(() => ({
+          eq: vi.fn((col1: string, val1: any) => ({
+            eq: vi.fn((col2: string, val2: any) => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: (dbMock[table] || []).find((r) => r[col1] === val1 && r[col2] === val2) || null,
+                error: null,
+              }),
+            })),
+          })),
+        })),
         upsert: vi.fn((data: any) => {
-          if (!insertedTables[table]) insertedTables[table] = [];
+          if (!dbMock[table]) dbMock[table] = [];
           if (Array.isArray(data)) {
-            insertedTables[table].push(...data);
+            dbMock[table].push(...data);
           } else {
-            insertedTables[table].push(data);
+            dbMock[table].push(data);
           }
           return Promise.resolve({ error: null });
         }),
@@ -32,24 +38,17 @@ describe('FASE 3 — SUPABASE REPOSITORY & DATA MIGRATION', () => {
     expect(res.created).toBe(true);
 
     // Confirma 76 tópicos e 182 syllabus items
-    expect(insertedTables['topics']).toHaveLength(76);
-    expect(insertedTables['syllabus_items']).toHaveLength(182);
+    expect(dbMock['topics']).toHaveLength(76);
+    expect(dbMock['syllabus_items']).toHaveLength(182);
 
     // Confirma que starter_rank foi preservado
-    const lingTopic = insertedTables['topics'].find((t) => t.id === 'top-p2-ling-3');
+    const lingTopic = dbMock['topics'].find((t) => t.id === 'top-p2-ling-3');
     expect(lingTopic).toBeDefined();
     expect(lingTopic.starter_rank).toBe(1);
     expect(lingTopic.user_id).toBe(userId);
 
-    // Re-execução quando count >= 76 é idempotente e rápida
-    const mockSupabaseAlreadyExists: any = {
-      from: vi.fn(() => ({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({ count: 76, error: null }),
-        }),
-      })),
-    };
-    const resIdempotent = await ensureUserStudyData(userId, mockSupabaseAlreadyExists);
+    // Re-execução quando curriculum_bootstrap_v1 já existe é idempotente
+    const resIdempotent = await ensureUserStudyData(userId, mockSupabase);
     expect(resIdempotent.success).toBe(true);
     expect(resIdempotent.created).toBe(false);
   });

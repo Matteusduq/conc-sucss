@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useModal } from '@/components/layout/DashboardLayoutClient';
 import { JourneyHeader } from '@/components/gamification/JourneyHeader';
 import { JourneyMap } from '@/components/gamification/JourneyMap';
@@ -15,7 +15,7 @@ import { getLocalDateString, getDaysUntilExam } from '@/lib/utils/date';
 import { ShieldCheck } from 'lucide-react';
 
 export default function JornadaPage() {
-  const { store, openMockModal } = useModal();
+  const { store, openMockModal, updateStore } = useModal();
   const todayStr = getLocalDateString();
   const daysUntilExam = getDaysUntilExam(store.exam.exam_date);
 
@@ -66,6 +66,23 @@ export default function JornadaPage() {
 
   // Stable daily missions
   const { missions } = getOrCreateDailyMissions(todayStr, store);
+
+  useEffect(() => {
+    if (!store.dailyMissions[todayStr] || store.dailyMissions[todayStr].length === 0) {
+      updateStore(
+        (prev) => ({
+          ...prev,
+          dailyMissions: {
+            ...prev.dailyMissions,
+            [todayStr]: missions,
+          },
+        }),
+        async (repo, uId) => {
+          await repo.persistDailyMissions(uId, missions);
+        }
+      );
+    }
+  }, [todayStr, store.dailyMissions, missions, updateStore]);
 
   // Weekly consistency & Boss completion
   const meaningfulDates = getAllMeaningfulStudyDates({
