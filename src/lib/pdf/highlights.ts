@@ -162,3 +162,84 @@ export function validateSelection(
         : ({ left: 0, top: 0, width: 0, height: 0 } as DOMRect),
   };
 }
+
+/**
+ * Localiza nós de texto no textLayer correspondentes ao texto selecionado e
+ * gera retângulos normalizados para reancoragem após atualização de versão.
+ */
+export function findDomRectsForText(
+  container: HTMLElement,
+  selectedText: string,
+  startCharIndex?: number
+): HighlightRect[] | null {
+  if (typeof window === 'undefined' || !container || !selectedText) return null;
+
+  const textLayer =
+    container.querySelector('.react-pdf__Page__textContent') ||
+    container.querySelector('.react-pdf__Page__textLayer') ||
+    container;
+
+  const textNodes: { node: Node; start: number; end: number }[] = [];
+  const walker = document.createTreeWalker(textLayer, NodeFilter.SHOW_TEXT);
+  let fullStr = '';
+  let n = walker.nextNode();
+  while (n) {
+    const val = n.nodeValue || '';
+    if (val.length > 0) {
+      textNodes.push({ node: n, start: fullStr.length, end: fullStr.length + val.length });
+      fullStr += val;
+    }
+    n = walker.nextNode();
+  }
+
+  if (fullStr.length === 0) return null;
+
+  let matchIndex = -1;
+  if (typeof startCharIndex === 'number' && startCharIndex >= 0) {
+    matchIndex = fullStr.indexOf(selectedText, Math.max(0, startCharIndex - 20));
+  }
+  if (matchIndex === -1) {
+    matchIndex = fullStr.indexOf(selectedText);
+  }
+  if (matchIndex === -1) {
+    matchIndex = fullStr.toLowerCase().indexOf(selectedText.toLowerCase());
+  }
+
+  if (matchIndex === -1) return null;
+
+  const matchEnd = matchIndex + selectedText.length;
+  let startNode: Node | null = null;
+  let startNodeOffset = 0;
+  let endNode: Node | null = null;
+  let endNodeOffset = 0;
+
+  for (const item of textNodes) {
+    if (!startNode && matchIndex >= item.start && matchIndex < item.end) {
+      startNode = item.node;
+      startNodeOffset = matchIndex - item.start;
+    }
+    if (matchEnd > item.start && matchEnd <= item.end) {
+      endNode = item.node;
+      endNodeOffset = matchEnd - item.start;
+      break;
+    }
+  }
+
+  if (startNode && endNode) {
+    try {
+      const range = document.createRange();
+      range.setStart(startNode, startNodeOffset);
+      range.setEnd(endNode, endNodeOffset);
+      const pageRect = container.getBoundingClientRect();
+      const rawRects = range.getClientRects();
+      if (rawRects.length > 0) {
+        return normalizeRects(rawRects, pageRect);
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+

@@ -101,6 +101,15 @@ export async function getStudyMaterialSignedUrl(
   storagePath: string,
   expiresInSeconds: number = 3600
 ): Promise<string> {
+  // Suporte a caminhos estáticos locais para testes e demonstrações de desenvolvimento
+  if (
+    storagePath.startsWith('/') ||
+    storagePath.startsWith('http://') ||
+    storagePath.startsWith('https://')
+  ) {
+    return storagePath;
+  }
+
   const supabase = createClient();
   const { data, error } = await supabase.storage
     .from(STUDY_MATERIALS_BUCKET)

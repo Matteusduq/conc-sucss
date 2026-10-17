@@ -35,6 +35,7 @@ interface HighlightSidebarProps {
   onSaveFlashcard: (draft: HighlightFlashcardDraft & { explanation: string }) => Promise<void>;
   onOpenTec: () => void;
   generatingHighlightId?: string | null;
+  currentMaterialVersion?: number;
 }
 
 export function HighlightSidebar({
@@ -54,6 +55,7 @@ export function HighlightSidebar({
   onSaveFlashcard,
   onOpenTec,
   generatingHighlightId,
+  currentMaterialVersion,
 }: HighlightSidebarProps) {
   const [activeTab, setActiveTab] = useState<SidebarTab>('highlights');
   const pageNote = notesByPage[currentPage.toString()] || '';
@@ -82,6 +84,7 @@ export function HighlightSidebar({
           onDiscardDraft={onDiscardDraft}
           onSaveFlashcard={onSaveFlashcard}
           isGenerating={generatingHighlightId === selectedHighlight.id}
+          currentMaterialVersion={currentMaterialVersion}
         />
       </div>
     );
@@ -202,6 +205,17 @@ export function HighlightSidebar({
                             Falha IA
                           </span>
                         ) : null}
+
+                        {currentMaterialVersion !== undefined &&
+                          h.material_version !== currentMaterialVersion && (
+                            <span
+                              className="px-1.5 py-0.5 rounded bg-amber-950/80 border border-amber-800/80 text-amber-300 font-medium text-[9px] flex items-center gap-1"
+                              title="Esta marcação precisa ser revisada após a atualização do PDF."
+                            >
+                              <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />
+                              Revisar versão
+                            </span>
+                          )}
                       </div>
 
                       <p className="text-zinc-200 line-clamp-2 text-[11px] italic leading-relaxed">

@@ -771,4 +771,24 @@ export class SupabaseStudyRepository {
       throw new PersistenceError(`Erro ao atualizar IA do destaque: ${error.message}`, error);
     }
   }
+
+  async updateStudyMaterialPageCount(
+    userId: string,
+    materialId: string,
+    pageCount: number
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from('study_materials')
+      .update({
+        page_count: pageCount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .eq('id', materialId);
+
+    if (error) {
+      throw new PersistenceError(`Erro ao atualizar page_count do material: ${error.message}`, error);
+    }
+  }
 }
+

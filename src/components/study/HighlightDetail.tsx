@@ -25,6 +25,7 @@ interface HighlightDetailProps {
   onDiscardDraft: (highlightId: string) => void;
   onSaveFlashcard: (draft: HighlightFlashcardDraft & { explanation: string }) => Promise<void>;
   isGenerating?: boolean;
+  currentMaterialVersion?: number;
 }
 
 export function HighlightDetail({
@@ -36,6 +37,7 @@ export function HighlightDetail({
   onDiscardDraft,
   onSaveFlashcard,
   isGenerating = false,
+  currentMaterialVersion,
 }: HighlightDetailProps) {
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [isSavingCard, setIsSavingCard] = useState(false);
@@ -86,7 +88,7 @@ export function HighlightDetail({
     }
   };
 
-  const isActuallyGenerating = isGenerating || highlight.ai_status === 'GENERATING';
+  const isActuallyGenerating = isGenerating;
 
   return (
     <div className="flex flex-col h-full bg-zinc-950 border border-zinc-800 rounded-xl overflow-hidden shadow-2xl text-xs animate-in fade-in duration-150">
@@ -113,6 +115,20 @@ export function HighlightDetail({
 
       {/* Conteúdo com scroll */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Aviso de atualização do PDF e necessidade de revisão */}
+        {currentMaterialVersion !== undefined &&
+          highlight.material_version !== currentMaterialVersion && (
+            <div className="p-3.5 rounded-xl border border-amber-800/80 bg-amber-950/30 text-amber-200 space-y-1.5">
+              <div className="flex items-center gap-1.5 font-semibold text-xs text-amber-300">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Revisão Necessária</span>
+              </div>
+              <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                Esta marcação precisa ser revisada após a atualização do PDF.
+              </p>
+            </div>
+          )}
+
         {/* Trecho selecionado */}
         <div className="space-y-1.5">
           <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400">
@@ -122,6 +138,30 @@ export function HighlightDetail({
             &ldquo;{highlight.selected_text}&rdquo;
           </div>
         </div>
+
+        {/* Status: Geração interrompida ou expirada */}
+        {highlight.ai_status === 'GENERATING' && !isActuallyGenerating && (
+          <div className="p-4 rounded-xl border border-amber-900/60 bg-amber-950/20 space-y-3">
+            <div className="flex items-start gap-2 text-amber-300">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-amber-200">Geração interrompida</p>
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  A geração anterior com a IA não foi concluída. Clique abaixo para tentar novamente.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onRegenerateAI(highlight.id)}
+              className="w-full border-amber-800/80 text-amber-200 hover:bg-amber-950/40"
+            >
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+              Tentar novamente
+            </Button>
+          </div>
+        )}
 
         {/* Status: Gerando IA */}
         {isActuallyGenerating && (

@@ -6,17 +6,27 @@ import { MaterialHighlight } from '@/types/database';
 interface HighlightOverlayProps {
   highlights: MaterialHighlight[];
   activeHighlightId: string | null;
+  currentMaterialVersion?: number;
   onSelectHighlight: (highlight: MaterialHighlight) => void;
 }
 
 export function HighlightOverlay({
   highlights,
   activeHighlightId,
+  currentMaterialVersion,
   onSelectHighlight,
 }: HighlightOverlayProps) {
   return (
     <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
       {highlights.map((highlight) => {
+        // Se a versão do highlight diferir da versão do PDF, não renderiza posições antigas
+        if (
+          currentMaterialVersion !== undefined &&
+          highlight.material_version !== currentMaterialVersion
+        ) {
+          return null;
+        }
+
         const isActive = highlight.id === activeHighlightId;
 
         return (

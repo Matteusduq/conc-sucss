@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
   ChevronLeft,
@@ -27,6 +27,8 @@ import { useModal } from '@/components/layout/DashboardLayoutClient';
 import { createClient } from '@/lib/supabase/client';
 import { SupabaseStudyRepository } from '@/lib/data/repository/supabase-repository';
 import { createFlashcardAction } from '@/lib/data/store';
+import { reanchorHighlight } from '@/lib/pdf/text-anchor';
+import { findDomRectsForText } from '@/lib/pdf/highlights';
 import { PdfSelectionToolbar } from './PdfSelectionToolbar';
 import { HighlightSidebar } from './HighlightSidebar';
 import type { TextSelectionPayload } from './PdfDocumentView';
@@ -83,6 +85,8 @@ export function PdfReader({
   const [signedUrl, setSignedUrl] = useState<string | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(true);
   const [pdfError, setPdfError] = useState<string | null>(null);
+  const [highlightError, setHighlightError] = useState<string | null>(null);
+  const hasRetriedSignedUrlRef = useRef<boolean>(false);
 
   // Estados de marcações e seleção
   const [highlights, setHighlights] = useState<MaterialHighlight[]>([]);
@@ -144,7 +148,34 @@ export function PdfReader({
     };
   }, [material.storage_path, material.status]);
 
-  // 2. Lazy loading das marcações específicas deste material
+  // Recuperação de URL expirada: tenta gerar nova Signed URL UMA vez sem loop
+  const handlePdfLoadError = useCallback(
+    async (err: Error) => {
+      console.warn('Erro ao carregar PDF:', err.message);
+
+      if (!hasRetriedSignedUrlRef.current && material.storage_path) {
+        hasRetriedSignedUrlRef.current = true;
+        try {
+          setIsLoadingPdf(true);
+          setPdfError(null);
+          const newUrl = await getStudyMaterialSignedUrl(material.storage_path, 7200);
+          setSignedUrl(newUrl);
+          setIsLoadingPdf(false);
+          return;
+        } catch (retryErr) {
+          console.error('Falha ao renovar signed URL do PDF:', retryErr);
+        }
+      }
+
+      setPdfError(
+        'Não foi possível carregar o arquivo PDF. Verifique a conexão ou se o material está íntegro.'
+      );
+      setIsLoadingPdf(false);
+    },
+    [material.storage_path]
+  );
+
+  // 2. Lazy loading das marcações com detecção de GENERATING abandonado
   useEffect(() => {
     let isCancelled = false;
 
@@ -153,11 +184,37 @@ export function PdfReader({
       try {
         const data = await repo.listMaterialHighlights(user.id, material.id);
         if (!isCancelled) {
-          setHighlights(data);
+          // Detecta status GENERATING abandonado sem resultado anterior
+          const abandoned = data.filter((h) => h.ai_status === 'GENERATING');
+          const sanitized = data.map((h) => {
+            if (h.ai_status === 'GENERATING') {
+              return {
+                ...h,
+                ai_status: 'FAILED' as const,
+                ai_error: h.ai_error || 'Geração anterior interrompida. Clique para tentar novamente.',
+              };
+            }
+            return h;
+          });
+
+          // Atualiza os abandonados no banco para FAILED
+          if (abandoned.length > 0) {
+            Promise.all(
+              abandoned.map((h) =>
+                repo.updateMaterialHighlightAI(user.id, {
+                  id: h.id,
+                  ai_status: 'FAILED',
+                  ai_error: 'Geração anterior interrompida. Clique para tentar novamente.',
+                }).catch((e) => console.error('Erro ao atualizar highlight abandonado:', e))
+              )
+            );
+          }
+
+          setHighlights(sanitized);
 
           // Se houver deep link via initialHighlightId
           if (initialHighlightId) {
-            const found = data.find((h) => h.id === initialHighlightId);
+            const found = sanitized.find((h) => h.id === initialHighlightId);
             if (found) {
               setCurrentPage(found.page_number);
               setSelectedHighlight(found);
@@ -176,21 +233,71 @@ export function PdfReader({
     };
   }, [material.id, user?.id, repo, initialHighlightId]);
 
-  // Handler de sucesso ao carregar documento PDF
+  // Handler de sucesso ao carregar documento PDF: persiste page_count real em study_materials
   const handleDocumentLoadSuccess = useCallback(
     (numPages: number) => {
       setTotalPages(numPages);
       setIsLoadingPdf(false);
 
-      // Se o total de páginas no banco estiver desatualizado ou nulo, atualiza
+      // Quando o PDF carregar e numPages diferir de study_materials.page_count:
+      // persistir o page_count real em study_materials; não confundir com MaterialProgress.
       if (material.page_count !== numPages) {
-        onUpdateProgress({
-          current_page: Math.min(currentPage, numPages),
-          progress_percent: Math.round((Math.max(progress?.max_page_reached || 1, currentPage) / numPages) * 100),
+        repo.updateStudyMaterialPageCount(userId, material.id, numPages).catch((err) => {
+          console.error('Erro ao atualizar page_count em study_materials:', err);
         });
       }
     },
-    [material.page_count, currentPage, progress?.max_page_reached, onUpdateProgress]
+    [material.id, material.page_count, repo, userId]
+  );
+
+  // Reancoragem automática de marcações quando a versão do PDF foi alterada
+  const handlePageRendered = useCallback(
+    async (pageNumber: number, fullPageText: string, container: HTMLElement) => {
+      const currentVer = material.version || 1;
+      const outOfDateHighlights = highlights.filter(
+        (h) => h.page_number === pageNumber && h.material_version !== currentVer
+      );
+
+      if (outOfDateHighlights.length === 0) return;
+
+      for (const h of outOfDateHighlights) {
+        const reanchorRes = reanchorHighlight({
+          fullPageText,
+          selectedText: h.selected_text,
+          quotePrefix: h.quote_prefix,
+          quoteSuffix: h.quote_suffix,
+        });
+
+        // Se houver correspondência única, recalcula rects e offsets e persiste
+        if (reanchorRes.found && !reanchorRes.isAmbiguous && reanchorRes.startOffset != null) {
+          const newRects = findDomRectsForText(container, h.selected_text, reanchorRes.startOffset);
+
+          if (newRects && newRects.length > 0) {
+            const updatedHighlight: MaterialHighlight = {
+              ...h,
+              material_version: currentVer,
+              text_start_offset: reanchorRes.startOffset,
+              text_end_offset: reanchorRes.endOffset,
+              rects: newRects,
+              updated_at: new Date().toISOString(),
+            };
+
+            try {
+              await repo.persistMaterialHighlight(userId, updatedHighlight);
+              setHighlights((prev) =>
+                prev.map((item) => (item.id === h.id ? updatedHighlight : item))
+              );
+              setSelectedHighlight((prev) =>
+                prev?.id === h.id ? updatedHighlight : prev
+              );
+            } catch (persistErr) {
+              console.error('Erro ao persistir reancoragem do destaque:', persistErr);
+            }
+          }
+        }
+      }
+    },
+    [material.version, highlights, repo, userId]
   );
 
   // Navegação de página
@@ -278,8 +385,8 @@ export function PdfReader({
       context_after: activeSelection.contextAfter || null,
       quote_prefix: activeSelection.quotePrefix || null,
       quote_suffix: activeSelection.quoteSuffix || null,
-      text_start_offset: null,
-      text_end_offset: null,
+      text_start_offset: activeSelection.startOffset ?? null,
+      text_end_offset: activeSelection.endOffset ?? null,
       rects: activeSelection.rects,
       color: 'YELLOW',
       ai_status: 'GENERATING',
@@ -295,11 +402,14 @@ export function PdfReader({
       updated_at: new Date().toISOString(),
     };
 
-    // 1. Persiste imediatamente a marcação para garantir que nunca suma
+    // 1. Persiste imediatamente a marcação para garantir integridade
     try {
       await repo.persistMaterialHighlight(userId, newHighlight);
     } catch (err) {
       console.error('Erro ao persistir destaque inicial:', err);
+      setIsHighlighting(false);
+      setHighlightError('Falha ao salvar marcação no servidor. Tente novamente.');
+      return; // Interrompe o fluxo: NÃO adiciona localmente, NÃO chama IA
     }
 
     // 2. Limpa seleção visual e abre painel da marcação
@@ -342,12 +452,24 @@ export function PdfReader({
       }
     } catch (err) {
       console.error('Erro na chamada da API de IA:', err);
+      const errText =
+        err instanceof Error ? err.message : 'Erro de conexão com o servidor de IA.';
       const failedHighlight: MaterialHighlight = {
         ...newHighlight,
         ai_status: 'FAILED',
-        ai_error: 'Erro de conexão com o servidor de IA.',
+        ai_error: errText,
         updated_at: new Date().toISOString(),
       };
+      // Persiste FAILED no Supabase mesmo em erro de rede
+      try {
+        await repo.updateMaterialHighlightAI(userId, {
+          id: newHighlight.id,
+          ai_status: 'FAILED',
+          ai_error: errText,
+        });
+      } catch (persistErr) {
+        console.error('Erro ao persistir status FAILED no Supabase:', persistErr);
+      }
       setHighlights((prev) => prev.map((h) => (h.id === newHighlight.id ? failedHighlight : h)));
       setSelectedHighlight(failedHighlight);
     } finally {
@@ -385,17 +507,43 @@ export function PdfReader({
               ai_error: errText,
               updated_at: new Date().toISOString(),
             };
+            await repo.updateMaterialHighlightAI(userId, {
+              id: highlightId,
+              ai_status: 'FAILED',
+              ai_error: errText,
+            });
             setHighlights((prev) => prev.map((h) => (h.id === target.id ? failedHighlight : h)));
             setSelectedHighlight(failedHighlight);
           }
         }
       } catch (err) {
         console.error('Erro ao regenerar IA:', err);
+        const errText =
+          err instanceof Error ? err.message : 'Erro de conexão com o servidor de IA.';
+        if (target) {
+          const failedHighlight: MaterialHighlight = {
+            ...target,
+            ai_status: 'FAILED',
+            ai_error: errText,
+            updated_at: new Date().toISOString(),
+          };
+          try {
+            await repo.updateMaterialHighlightAI(userId, {
+              id: highlightId,
+              ai_status: 'FAILED',
+              ai_error: errText,
+            });
+          } catch (persistErr) {
+            console.error('Erro ao persistir status FAILED no retry:', persistErr);
+          }
+          setHighlights((prev) => prev.map((h) => (h.id === target.id ? failedHighlight : h)));
+          setSelectedHighlight(failedHighlight);
+        }
       } finally {
         setGeneratingHighlightId(null);
       }
     },
-    [highlights]
+    [highlights, repo, userId]
   );
 
   // Descartar sugestão da IA (mantém a marcação amarela)
@@ -534,6 +682,22 @@ export function PdfReader({
         </div>
       )}
 
+      {/* Alerta de erro ao salvar marcação */}
+      {highlightError && (
+        <div className="fixed top-6 right-6 z-50 p-3 rounded-xl bg-rose-950/90 border border-rose-500/50 text-rose-200 text-xs shadow-2xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{highlightError}</span>
+          </div>
+          <button
+            onClick={() => setHighlightError(null)}
+            className="text-rose-300 hover:text-white text-xs px-1.5 py-0.5 rounded cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Toolbar Flutuante de Seleção Nativa */}
       {toolbarPos && activeSelection && (
         <PdfSelectionToolbar
@@ -654,12 +818,14 @@ export function PdfReader({
               zoom={zoom}
               highlights={currentPageHighlights}
               activeHighlightId={selectedHighlight?.id || null}
+              currentMaterialVersion={material.version || 1}
               onLoadSuccess={handleDocumentLoadSuccess}
-              onLoadError={(err) => setPdfError(err.message)}
+              onLoadError={handlePdfLoadError}
               onSelectHighlight={(h) => setSelectedHighlight(h)}
               onTextSelected={handleTextSelected}
               onMultiPageSelectionAttempt={handleMultiPageSelectionAttempt}
               onClearSelection={handleClearSelection}
+              onPageRendered={handlePageRendered}
             />
           ) : null}
         </div>
@@ -683,6 +849,7 @@ export function PdfReader({
             onSaveFlashcard={handleSaveFlashcard}
             onOpenTec={onOpenTec}
             generatingHighlightId={generatingHighlightId}
+            currentMaterialVersion={material.version || 1}
           />
         </div>
       </div>

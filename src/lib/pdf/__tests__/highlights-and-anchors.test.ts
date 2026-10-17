@@ -124,6 +124,8 @@ describe('PDF Highlights & Anchoring Utilities (Points 8-13)', () => {
     expect(anchor.quoteSuffix).toContain('II - leis complementares;');
     expect(anchor.contextBefore).toContain('O processo legislativo');
     expect(anchor.contextAfter).toContain('leis ordinárias');
+    expect(anchor.startOffset).toBeGreaterThan(0);
+    expect(anchor.endOffset).toBe(anchor.startOffset + selected.length);
   });
 
   // Ponto 12: reancoragem determinística por texto e prefixo/sufixo
@@ -159,6 +161,7 @@ describe('PDF Highlights & Anchoring Utilities (Points 8-13)', () => {
 
     expect(ambiguousResult.isAmbiguous).toBe(true);
     expect(ambiguousResult.found).toBe(false);
+    expect(ambiguousResult.message).toBe('Esta marcação precisa ser revisada após a atualização do PDF.');
 
     // Texto que não existe mais na nova versão
     const notFoundResult = reanchorHighlight({
@@ -168,5 +171,7 @@ describe('PDF Highlights & Anchoring Utilities (Points 8-13)', () => {
 
     expect(notFoundResult.found).toBe(false);
     expect(notFoundResult.startOffset).toBeNull();
+    expect(notFoundResult.message).toBe('Esta marcação precisa ser revisada após a atualização do PDF.');
   });
 });
+

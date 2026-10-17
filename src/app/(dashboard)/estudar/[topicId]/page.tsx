@@ -8,7 +8,7 @@ import { PdfReader } from '@/components/study/PdfReader';
 import { Button } from '@/components/ui/Button';
 import { PriorityBadge } from '@/components/study/PriorityBadge';
 import { StatusBadge } from '@/components/study/StatusBadge';
-import { ArrowLeft, Sparkles, ExternalLink, Brain } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Brain } from 'lucide-react';
 import { updateMaterialProgressAction } from '@/lib/data/store';
 
 export default function EstudarPage({ params }: { params: Promise<{ topicId: string }> }) {
@@ -120,22 +120,6 @@ export default function EstudarPage({ params }: { params: Promise<{ topicId: str
         </div>
 
         <div className="flex items-center gap-2">
-          {/* AI Flashcard Generator Button (Requirement 45: Disabled with tooltip) */}
-          <div className="relative group">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled
-              className="opacity-60 cursor-not-allowed border-zinc-800 text-zinc-400"
-            >
-              <Sparkles className="w-3.5 h-3.5 mr-1 text-purple-400" />
-              Gerar cartões com IA
-            </Button>
-            <div className="absolute right-0 top-full mt-1.5 hidden group-hover:block z-50 w-64 p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 shadow-xl pointer-events-none">
-              Integração de IA ainda não configurada. A arquitetura está pronta e aguarda ativação de chave.
-            </div>
-          </div>
-
           <Button
             size="sm"
             onClick={() => openCardModal({ topicId: topic.id })}

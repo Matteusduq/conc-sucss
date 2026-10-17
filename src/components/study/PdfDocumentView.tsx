@@ -22,6 +22,8 @@ export interface TextSelectionPayload {
   contextAfter: string;
   quotePrefix: string;
   quoteSuffix: string;
+  startOffset: number;
+  endOffset: number;
 }
 
 interface PdfDocumentViewProps {
@@ -30,12 +32,14 @@ interface PdfDocumentViewProps {
   zoom: number; // Porcentagem: 100 = 1.0
   highlights: MaterialHighlight[];
   activeHighlightId: string | null;
+  currentMaterialVersion?: number;
   onLoadSuccess: (numPages: number) => void;
   onLoadError: (error: Error) => void;
   onSelectHighlight: (highlight: MaterialHighlight) => void;
   onTextSelected: (payload: TextSelectionPayload) => void;
   onMultiPageSelectionAttempt?: () => void;
   onClearSelection: () => void;
+  onPageRendered?: (pageNumber: number, fullPageText: string, container: HTMLElement) => void;
 }
 
 export function PdfDocumentView({
@@ -44,12 +48,14 @@ export function PdfDocumentView({
   zoom,
   highlights,
   activeHighlightId,
+  currentMaterialVersion,
   onLoadSuccess,
   onLoadError,
   onSelectHighlight,
   onTextSelected,
   onMultiPageSelectionAttempt,
   onClearSelection,
+  onPageRendered,
 }: PdfDocumentViewProps) {
   const pageContainerRef = useRef<HTMLDivElement>(null);
   const [pageWidth, setPageWidth] = useState<number>(750);
@@ -95,8 +101,26 @@ export function PdfDocumentView({
       contextAfter: anchorContext.contextAfter,
       quotePrefix: anchorContext.quotePrefix,
       quoteSuffix: anchorContext.quoteSuffix,
+      startOffset: anchorContext.startOffset,
+      endOffset: anchorContext.endOffset,
     });
   }, [onClearSelection, onMultiPageSelectionAttempt, onTextSelected]);
+
+  // Notifica o container quando a página é carregada para possibilitar reancoragem
+  React.useEffect(() => {
+    if (!isPageLoaded || !pageContainerRef.current) return;
+    const container = pageContainerRef.current;
+    const timer = setTimeout(() => {
+      const textLayerEl =
+        (container.querySelector('.react-pdf__Page__textContent') as HTMLElement) ||
+        (container.querySelector('.react-pdf__Page__textLayer') as HTMLElement) ||
+        container;
+      const fullPageText = textLayerEl.textContent || '';
+      onPageRendered?.(currentPage, fullPageText, container);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [isPageLoaded, currentPage, onPageRendered]);
 
   return (
     <div
@@ -149,6 +173,7 @@ export function PdfDocumentView({
             <HighlightOverlay
               highlights={highlights}
               activeHighlightId={activeHighlightId}
+              currentMaterialVersion={currentMaterialVersion}
               onSelectHighlight={onSelectHighlight}
             />
           )}

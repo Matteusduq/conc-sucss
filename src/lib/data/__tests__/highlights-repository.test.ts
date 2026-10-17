@@ -241,4 +241,89 @@ describe('Material Highlights Repository & Persistence (Points 1-7)', () => {
       PersistenceError
     );
   });
+
+  // Ponto 8: text_start_offset e text_end_offset são persistidos
+  it('8. persistMaterialHighlight persiste text_start_offset e text_end_offset', async () => {
+    let insertedRow: any = null;
+    const mockSupabase: any = {
+      from: vi.fn((table: string) => ({
+        upsert: vi.fn((payload: any) => {
+          insertedRow = payload;
+          return Promise.resolve({ error: null });
+        }),
+      })),
+    };
+
+    const repo = new SupabaseStudyRepository(mockSupabase);
+    const highlight = {
+      id: 'hl-offsets',
+      user_id: userId,
+      material_id: 'mat-01',
+      topic_id: 'top-01',
+      page_number: 1,
+      material_version: 1,
+      selected_text: 'Trecho com offsets calculados',
+      text_start_offset: 42,
+      text_end_offset: 71,
+      rects: [],
+      color: 'YELLOW',
+      ai_status: 'NOT_REQUESTED',
+      context_before: null,
+      context_after: null,
+      quote_prefix: null,
+      quote_suffix: null,
+      ai_explanation: null,
+      ai_key_point: null,
+      ai_cebraspe_trap: null,
+      ai_flashcard_draft: null,
+      ai_provider: null,
+      ai_model: null,
+      ai_generated_at: null,
+      ai_error: null,
+      created_at: '2026-10-17T00:00:00Z',
+      updated_at: '2026-10-17T00:00:00Z',
+    } as MaterialHighlight;
+
+    await repo.persistMaterialHighlight(userId, highlight);
+
+    expect(insertedRow).toBeDefined();
+    expect(insertedRow.text_start_offset).toBe(42);
+    expect(insertedRow.text_end_offset).toBe(71);
+  });
+
+  // Ponto 9: updateStudyMaterialPageCount persiste page_count real em study_materials
+  it('9. updateStudyMaterialPageCount persiste page_count em study_materials', async () => {
+    let updatePayload: any = null;
+    const eqCalls: string[] = [];
+    const mockSupabase: any = {
+      from: vi.fn((table: string) => {
+        expect(table).toBe('study_materials');
+        return {
+          update: vi.fn((payload: any) => {
+            updatePayload = payload;
+            return {
+              eq: vi.fn((col: string, val: any) => {
+                eqCalls.push(`${col}=${val}`);
+                return {
+                  eq: vi.fn((col2: string, val2: any) => {
+                    eqCalls.push(`${col2}=${val2}`);
+                    return Promise.resolve({ error: null });
+                  }),
+                };
+              }),
+            };
+          }),
+        };
+      }),
+    };
+
+    const repo = new SupabaseStudyRepository(mockSupabase);
+    await repo.updateStudyMaterialPageCount(userId, 'mat-top-p1-port-1', 12);
+
+    expect(updatePayload).toBeDefined();
+    expect(updatePayload.page_count).toBe(12);
+    expect(eqCalls).toContain(`user_id=${userId}`);
+    expect(eqCalls).toContain('id=mat-top-p1-port-1');
+  });
 });
+
