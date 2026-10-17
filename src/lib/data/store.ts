@@ -885,6 +885,34 @@ export function createFlashcardAction(
   return gamified;
 }
 
+export function deleteFlashcardAction(
+  flashcardId: string,
+  store: AppStoreData
+): AppStoreData {
+  const card = store.flashcards.find((c) => c.id === flashcardId);
+  if (!card) return store;
+
+  const nextFlashcards = store.flashcards.filter((c) => c.id !== flashcardId);
+  const nextFsrsStates = { ...store.fsrsStates };
+  delete nextFsrsStates[flashcardId];
+
+  const nextReviews = store.reviews.filter((r) => r.flashcard_id !== flashcardId);
+
+  let nextStore: AppStoreData = {
+    ...store,
+    flashcards: nextFlashcards,
+    fsrsStates: nextFsrsStates,
+    reviews: nextReviews,
+  };
+
+  if (card.topic_id) {
+    nextStore = recalculateTopicDomainService(card.topic_id, nextStore);
+  }
+
+  saveStore(nextStore);
+  return nextStore;
+}
+
 export function reviewFlashcardAction(
   flashcardId: string,
   rating: Rating,

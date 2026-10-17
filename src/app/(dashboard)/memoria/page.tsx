@@ -1,23 +1,52 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useModal } from '@/components/layout/DashboardLayoutClient';
-import { getDueFlashcards, reviewFlashcardAction } from '@/lib/data/store';
+import { getDueFlashcards, reviewFlashcardAction, deleteFlashcardAction } from '@/lib/data/store';
 import { FlashcardReviewer } from '@/components/memory/FlashcardReviewer';
-import { Card, CardHeader, CardTitle } from '@/components/ui/Card';
+import { DeleteFlashcardModal } from '@/components/memory/DeleteFlashcardModal';
+import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { PriorityBadge } from '@/components/study/PriorityBadge';
 import { Badge } from '@/components/ui/Badge';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { Brain, Plus, Play, Sparkles, CheckCircle2, Clock } from 'lucide-react';
-import { Rating } from 'ts-fsrs';
+import { formatDateBr } from '@/lib/utils/date';
+import { Flashcard } from '@/types/database';
+import { Brain, Plus, Play, CheckCircle2, Clock, Trash2, BookOpen } from 'lucide-react';
 
 export default function MemoriaPage() {
   const { store, openCardModal, updateStore } = useModal();
   const [isReviewing, setIsReviewing] = useState<boolean>(false);
+  const [cardToDelete, setCardToDelete] = useState<Flashcard | null>(null);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const dueCards = getDueFlashcards(store);
   const totalCards = store.flashcards.length;
+
+  const handleDeleteFlashcard = async (cardId: string) => {
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await updateStore(
+        (prevStore) => deleteFlashcardAction(cardId, prevStore),
+        async (repo, uId) => {
+          await repo.deleteFlashcard(uId, cardId);
+        }
+      );
+      setCardToDelete(null);
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Falha ao excluir o flashcard no servidor. Tente novamente.';
+      setDeleteError(msg);
+      throw err;
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Breakdown by FSRS states
   const states = Object.values(store.fsrsStates);
@@ -59,6 +88,7 @@ export default function MemoriaPage() {
               }
             );
           }}
+          onDeleteCard={handleDeleteFlashcard}
           onFinish={() => setIsReviewing(false)}
         />
       </div>
@@ -194,37 +224,101 @@ export default function MemoriaPage() {
         </div>
       )}
 
-      {/* Cards List Preview */}
+      {/* Meus Flashcards */}
       {store.flashcards.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-bold text-zinc-200">
-            Cartões Cadastrados ({store.flashcards.length})
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-zinc-200">
+              Meus Flashcards ({store.flashcards.length})
+            </h3>
+            <span className="text-[11px] text-zinc-500">
+              Gerencie seus cartões e agendamentos FSRS
+            </span>
+          </div>
+
           <div className="divide-y divide-zinc-800 border border-zinc-800 rounded-xl overflow-hidden bg-zinc-950/60">
             {store.flashcards.map((c) => {
+              const topic = store.topics.find((t) => t.id === c.topic_id);
               const fsrs = store.fsrsStates[c.id];
               const isDue = fsrs && new Date(fsrs.due).getTime() <= Date.now();
 
+              // Estado FSRS
+              const fsrsStateLabel =
+                fsrs?.state === 0
+                  ? 'Novo'
+                  : fsrs?.state === 1
+                  ? 'Aprendizagem'
+                  : fsrs?.state === 2
+                  ? 'Maduro'
+                  : fsrs?.state === 3
+                  ? 'Reaprendizagem'
+                  : 'FSRS';
+
+              const fsrsStateColor =
+                fsrs?.state === 0
+                  ? 'bg-blue-950/60 text-blue-400 border-blue-800/40'
+                  : fsrs?.state === 1
+                  ? 'bg-amber-950/60 text-amber-400 border-amber-800/40'
+                  : fsrs?.state === 2
+                  ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/40'
+                  : 'bg-purple-950/60 text-purple-400 border-purple-800/40';
+
               return (
-                <div key={c.id} className="p-3.5 flex items-start justify-between gap-3 text-xs">
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      {c.card_type === 'ERROR' && <Badge variant="high">Erro</Badge>}
+                <div
+                  key={c.id}
+                  className="p-3.5 flex items-start justify-between gap-3 text-xs hover:bg-zinc-900/30 transition-colors"
+                >
+                  <div className="space-y-1.5 min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {c.card_type === 'ERROR' && <Badge variant="high">Caderno de Erros</Badge>}
                       <PriorityBadge priority={c.exam_priority} />
-                      <span className="text-[10px] text-zinc-400 font-mono">
-                        {c.card_type}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono border ${fsrsStateColor}`}>
+                        {fsrsStateLabel}
                       </span>
+                      <span className="text-[11px] text-zinc-400 truncate max-w-xs font-medium">
+                        {topic?.name || c.topic_id}
+                      </span>
+                      {c.source_highlight_id && (
+                        <Link
+                          href={`/estudar/${c.topic_id}?highlight=${c.source_highlight_id}`}
+                          className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 hover:text-amber-300 transition-colors ml-1"
+                          title="Ver trecho marcado no material"
+                        >
+                          <BookOpen className="w-3 h-3" />
+                          <span>PDF</span>
+                        </Link>
+                      )}
                     </div>
-                    <p className="font-semibold text-zinc-200 truncate">{c.front}</p>
-                    <p className="text-zinc-400 text-[11px] truncate">{c.back}</p>
+                    <p className="font-semibold text-zinc-200 line-clamp-2 leading-relaxed">
+                      {c.front}
+                    </p>
+                    <p className="text-zinc-400 text-[11px] line-clamp-1 leading-relaxed">
+                      {c.back}
+                    </p>
                   </div>
-                  <div className="shrink-0 text-right font-mono text-[11px]">
-                    <span className={isDue ? 'text-amber-400 font-bold' : 'text-zinc-400'}>
-                      {isDue ? 'Devido hoje' : 'Em dia'}
-                    </span>
-                    <div className="text-[10px] text-zinc-400">
-                      Reps: {fsrs?.reps || 0}
+
+                  <div className="shrink-0 flex items-center gap-3">
+                    <div className="text-right font-mono text-[11px]">
+                      <span className={isDue ? 'text-amber-400 font-bold' : 'text-zinc-400'}>
+                        {isDue ? 'Devido hoje' : fsrs?.due ? formatDateBr(fsrs.due) : 'Em dia'}
+                      </span>
+                      <div className="text-[10px] text-zinc-500">
+                        Reps: {fsrs?.reps || 0}
+                      </div>
                     </div>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDeleteError(null);
+                        setCardToDelete(c);
+                      }}
+                      title="Excluir flashcard"
+                      className="text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 p-1.5 h-8 w-8"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
                 </div>
               );
@@ -232,6 +326,25 @@ export default function MemoriaPage() {
           </div>
         </div>
       )}
+
+      {/* Delete Flashcard Modal */}
+      <DeleteFlashcardModal
+        isOpen={Boolean(cardToDelete)}
+        onClose={() => {
+          if (!isDeleting) {
+            setCardToDelete(null);
+            setDeleteError(null);
+          }
+        }}
+        onConfirm={async () => {
+          if (cardToDelete) {
+            await handleDeleteFlashcard(cardToDelete.id);
+          }
+        }}
+        cardFront={cardToDelete?.front}
+        isDeleting={isDeleting}
+        errorMessage={deleteError}
+      />
     </div>
   );
 }

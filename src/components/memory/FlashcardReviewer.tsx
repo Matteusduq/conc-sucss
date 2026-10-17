@@ -8,12 +8,14 @@ import { getScheduledIntervals, dbStateToFsrsCard } from '@/lib/fsrs/scheduler';
 import { Button } from '@/components/ui/Button';
 import { PriorityBadge } from '@/components/study/PriorityBadge';
 import { Badge } from '@/components/ui/Badge';
-import { CheckCircle2, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle2, BookOpen, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { DeleteFlashcardModal } from './DeleteFlashcardModal';
 
 interface FlashcardReviewerProps {
   cards: CardWithMetadata[];
   desiredRetention?: number;
   onReviewCard: (cardId: string, rating: Rating, responseTimeMs: number) => void;
+  onDeleteCard?: (cardId: string) => Promise<void>;
   onFinish: () => void;
 }
 
@@ -21,14 +23,23 @@ export function FlashcardReviewer({
   cards,
   desiredRetention = 0.90,
   onReviewCard,
+  onDeleteCard,
   onFinish,
 }: FlashcardReviewerProps) {
+  const [sessionCards, setSessionCards] = useState<CardWithMetadata[]>(cards);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isRevealed, setIsRevealed] = useState(false);
   const [showExplanation, setShowExplanation] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  const currentCard = cards[currentIndex];
+  useEffect(() => {
+    setSessionCards(cards);
+  }, [cards]);
+
+  const currentCard = sessionCards[currentIndex];
 
   useEffect(() => {
     startTimeRef.current = Date.now();
@@ -48,14 +59,43 @@ export function FlashcardReviewer({
       onReviewCard(currentCard.id, rating, durationMs);
       setIsRevealed(false);
 
-      if (currentIndex + 1 < cards.length) {
+      if (currentIndex + 1 < sessionCards.length) {
         setCurrentIndex((prev) => prev + 1);
       } else {
         onFinish();
       }
     },
-    [currentCard, currentIndex, cards.length, onReviewCard, onFinish]
+    [currentCard, currentIndex, sessionCards.length, onReviewCard, onFinish]
   );
+
+  const handleDeleteConfirm = async () => {
+    if (!currentCard || !onDeleteCard) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDeleteCard(currentCard.id);
+      setIsDeleteModalOpen(false);
+
+      const nextCards = sessionCards.filter((c) => c.id !== currentCard.id);
+      if (nextCards.length === 0) {
+        onFinish();
+      } else {
+        setSessionCards(nextCards);
+        if (currentIndex >= nextCards.length) {
+          onFinish();
+        } else {
+          setIsRevealed(false);
+          setShowExplanation(false);
+          startTimeRef.current = Date.now();
+        }
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Falha ao excluir o flashcard. Tente novamente.';
+      setDeleteError(msg);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Keyboard navigation
   useEffect(() => {
@@ -90,7 +130,7 @@ export function FlashcardReviewer({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isRevealed, handleRating]);
 
-  if (!currentCard || cards.length === 0) {
+  if (!currentCard || sessionCards.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center bg-zinc-900/60 rounded-2xl border border-zinc-800">
         <CheckCircle2 className="w-12 h-12 text-emerald-400 mb-3" />
@@ -114,7 +154,7 @@ export function FlashcardReviewer({
       <div className="flex items-center justify-between text-xs text-zinc-400 pb-2 border-b border-zinc-800">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-zinc-200">
-            Cartão {currentIndex + 1} de {cards.length}
+            Cartão {currentIndex + 1} de {sessionCards.length}
           </span>
           <span className="text-zinc-600">•</span>
           <span>{currentCard.subject_name || 'Geral'}</span>
@@ -124,6 +164,20 @@ export function FlashcardReviewer({
             <Badge variant="high">Caderno de Erros</Badge>
           )}
           <PriorityBadge priority={currentCard.exam_priority} />
+          {onDeleteCard && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDeleteError(null);
+                setIsDeleteModalOpen(true);
+              }}
+              title="Excluir flashcard"
+              className="text-zinc-500 hover:text-rose-400 hover:bg-rose-950/30 p-1.5 h-7 w-7"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={onFinish}>
             Encerrar
           </Button>
@@ -262,6 +316,22 @@ export function FlashcardReviewer({
             Intervalos calculados automaticamente pelo algoritmo <span className="text-zinc-300 font-medium">ts-fsrs</span>
           </p>
         </div>
+      )}
+
+      {onDeleteCard && (
+        <DeleteFlashcardModal
+          isOpen={isDeleteModalOpen}
+          onClose={() => {
+            if (!isDeleting) {
+              setIsDeleteModalOpen(false);
+              setDeleteError(null);
+            }
+          }}
+          onConfirm={handleDeleteConfirm}
+          cardFront={currentCard?.front}
+          isDeleting={isDeleting}
+          errorMessage={deleteError}
+        />
       )}
     </div>
   );

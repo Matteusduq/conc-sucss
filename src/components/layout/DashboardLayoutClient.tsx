@@ -18,6 +18,7 @@ import {
   recordMockExamAction,
   AppStoreData,
   getDefaultStore,
+  saveStore,
 } from '@/lib/data/store';
 import { createClient } from '@/lib/supabase/client';
 import { SupabaseStudyRepository } from '@/lib/data/repository/supabase-repository';
@@ -203,6 +204,7 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
       } catch (err) {
         console.error('Falha na persistência remota:', err);
         setStore(prevStore);
+        saveStore(prevStore);
         pushNotification({
           id: `notif-err-${Date.now()}`,
           type: 'XP_AWARDED',
