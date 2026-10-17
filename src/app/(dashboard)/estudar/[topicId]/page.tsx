@@ -2,6 +2,7 @@
 
 import React, { use } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useModal } from '@/components/layout/DashboardLayoutClient';
 import { PdfReader } from '@/components/study/PdfReader';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +13,8 @@ import { updateMaterialProgressAction } from '@/lib/data/store';
 
 export default function EstudarPage({ params }: { params: Promise<{ topicId: string }> }) {
   const resolvedParams = use(params);
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get('highlight');
   const { store, user, openTecModal, openCardModal, updateStore } = useModal();
 
   const topic = store.topics.find((t) => t.id === resolvedParams.topicId);
@@ -167,6 +170,7 @@ export default function EstudarPage({ params }: { params: Promise<{ topicId: str
         topic={topic}
         material={material}
         progress={progress}
+        initialHighlightId={highlightId}
         onUpdateProgress={handleUpdateProgress}
         onCompleteMaterial={handleCompleteMaterial}
         onOpenTec={() => openTecModal(topic.id)}

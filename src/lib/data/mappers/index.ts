@@ -17,6 +17,7 @@ import {
   UserStudySettings,
   MockExam,
   StudyEvent,
+  MaterialHighlight,
 } from '@/types/database';
 import {
   GamificationProfile,
@@ -270,6 +271,8 @@ export function mapFlashcardFromDb(row: Record<string, unknown>): Flashcard {
     source_type: String(row.source_type) as Flashcard['source_type'],
     source_material_id: row.source_material_id ? String(row.source_material_id) : null,
     source_error_id: row.source_error_id ? String(row.source_error_id) : null,
+    source_highlight_id: row.source_highlight_id ? String(row.source_highlight_id) : null,
+    explanation: row.explanation ? String(row.explanation) : null,
     exam_priority: String(row.exam_priority) as Flashcard['exam_priority'],
     priority_boost: Number(row.priority_boost || 0),
     active: Boolean(row.active),
@@ -622,6 +625,90 @@ export function mapGamificationProfileToDb(profile: GamificationProfile): Record
     last_meaningful_study_date: profile.last_meaningful_study_date,
     weekly_consistency_days: profile.weekly_consistency_days,
     current_week_start: profile.current_week_start,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function mapFlashcardToDb(card: Flashcard): Record<string, unknown> {
+  return {
+    id: card.id,
+    user_id: card.user_id,
+    exam_id: card.exam_id,
+    subject_id: card.subject_id,
+    topic_id: card.topic_id,
+    card_type: card.card_type,
+    front: card.front,
+    back: card.back,
+    source_type: card.source_type,
+    source_material_id: card.source_material_id,
+    source_error_id: card.source_error_id,
+    source_highlight_id: card.source_highlight_id,
+    explanation: card.explanation,
+    exam_priority: card.exam_priority,
+    priority_boost: card.priority_boost,
+    active: card.active,
+    suspended: card.suspended,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export function mapMaterialHighlightFromDb(row: Record<string, unknown>): MaterialHighlight {
+  return {
+    id: String(row.id),
+    user_id: String(row.user_id),
+    material_id: String(row.material_id),
+    topic_id: String(row.topic_id),
+    page_number: Number(row.page_number),
+    material_version: Number(row.material_version || 1),
+    selected_text: String(row.selected_text),
+    context_before: row.context_before ? String(row.context_before) : null,
+    context_after: row.context_after ? String(row.context_after) : null,
+    quote_prefix: row.quote_prefix ? String(row.quote_prefix) : null,
+    quote_suffix: row.quote_suffix ? String(row.quote_suffix) : null,
+    text_start_offset: row.text_start_offset != null ? Number(row.text_start_offset) : null,
+    text_end_offset: row.text_end_offset != null ? Number(row.text_end_offset) : null,
+    rects: Array.isArray(row.rects) ? (row.rects as MaterialHighlight['rects']) : [],
+    color: (row.color as MaterialHighlight['color']) || 'YELLOW',
+    ai_status: (row.ai_status as MaterialHighlight['ai_status']) || 'NOT_REQUESTED',
+    ai_explanation: row.ai_explanation ? String(row.ai_explanation) : null,
+    ai_key_point: row.ai_key_point ? String(row.ai_key_point) : null,
+    ai_cebraspe_trap: row.ai_cebraspe_trap ? String(row.ai_cebraspe_trap) : null,
+    ai_flashcard_draft: (row.ai_flashcard_draft as MaterialHighlight['ai_flashcard_draft']) || null,
+    ai_provider: row.ai_provider ? String(row.ai_provider) : null,
+    ai_model: row.ai_model ? String(row.ai_model) : null,
+    ai_generated_at: row.ai_generated_at ? String(row.ai_generated_at) : null,
+    ai_error: row.ai_error ? String(row.ai_error) : null,
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  };
+}
+
+export function mapMaterialHighlightToDb(h: MaterialHighlight): Record<string, unknown> {
+  return {
+    id: h.id,
+    user_id: h.user_id,
+    material_id: h.material_id,
+    topic_id: h.topic_id,
+    page_number: h.page_number,
+    material_version: h.material_version,
+    selected_text: h.selected_text,
+    context_before: h.context_before,
+    context_after: h.context_after,
+    quote_prefix: h.quote_prefix,
+    quote_suffix: h.quote_suffix,
+    text_start_offset: h.text_start_offset,
+    text_end_offset: h.text_end_offset,
+    rects: h.rects,
+    color: h.color,
+    ai_status: h.ai_status,
+    ai_explanation: h.ai_explanation,
+    ai_key_point: h.ai_key_point,
+    ai_cebraspe_trap: h.ai_cebraspe_trap,
+    ai_flashcard_draft: h.ai_flashcard_draft,
+    ai_provider: h.ai_provider,
+    ai_model: h.ai_model,
+    ai_generated_at: h.ai_generated_at,
+    ai_error: h.ai_error,
     updated_at: new Date().toISOString(),
   };
 }

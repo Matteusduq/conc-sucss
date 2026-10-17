@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { AIProvider } from './provider';
 import {
   WeeklyAnalysisInput,
@@ -7,9 +6,14 @@ import {
   FlashcardDraft,
   StudyAdjustmentInput,
   AIInsightOutput,
+  HighlightExplanationInput,
+  HighlightExplanationResult,
 } from './types';
+import { LLMAIProvider, AIConfigurationError } from './llm-provider';
 
 export class MockAIProvider implements AIProvider {
+  constructor(private isTestMode: boolean = false) {}
+
   async generateWeeklyAnalysis(_input: WeeklyAnalysisInput): Promise<AIInsightOutput> {
     return {
       id: 'mock-insight',
@@ -37,7 +41,6 @@ export class MockAIProvider implements AIProvider {
   }
 
   async generateFlashcards(_input: FlashcardGenerationInput): Promise<FlashcardDraft[]> {
-    // Returns empty array to prevent inserting fake flashcards
     return [];
   }
 
@@ -53,6 +56,59 @@ export class MockAIProvider implements AIProvider {
       generatedAt: new Date().toISOString(),
     };
   }
+
+  async explainHighlightAndDraftFlashcard(
+    input: HighlightExplanationInput
+  ): Promise<HighlightExplanationResult> {
+    // Em testes automatizados, provê retorno determinístico
+    if (this.isTestMode || process.env.NODE_ENV === 'test') {
+      const lowerText = input.selectedText.toLowerCase();
+      if (
+        input.selectedText.includes('INTRODUCTORY_ONLY') ||
+        lowerText.includes('introdutóri') ||
+        lowerText.includes('generalidades')
+      ) {
+        return {
+          shouldCreateFlashcard: false,
+          explanation: 'O trecho selecionado é meramente introdutório e não contém uma unidade atômica de memorização.',
+          keyPoint: 'Trecho introdutório de contextualização.',
+          cebraspeTrap: null,
+          draft: null,
+          confidence: 'LOW',
+          reason: 'Este trecho é útil como contexto, mas não contém uma unidade de memorização suficientemente atômica.',
+          provider: 'mock-test',
+          model: 'mock-test-model',
+        };
+      }
+
+      return {
+        shouldCreateFlashcard: true,
+        explanation: `Explicação didática sobre "${input.selectedText.slice(0, 60)}...". Foco nas regras e diretrizes cobradas pela banca Cebraspe.`,
+        keyPoint: 'Conceito essencial e distinção mandatória para a prova.',
+        cebraspeTrap: 'A banca Cebraspe costuma inverter hipóteses de aplicabilidade da regra.',
+        draft: {
+          front: `Em relação a ${input.topicName}, qual o efeito prático do trecho?`,
+          back: input.selectedText.slice(0, 100),
+          cardType: 'RULE',
+          examPriority: input.priority,
+        },
+        confidence: 'HIGH',
+        reason: null,
+        provider: 'mock-test',
+        model: 'mock-test-model',
+      };
+    }
+
+    // Em produção, se não houver credencial configurada, nunca fabrica dados falsos
+    throw new AIConfigurationError('IA ainda não configurada. Configure AI_API_KEY no servidor.');
+  }
 }
 
-export const aiProvider: AIProvider = new MockAIProvider();
+export function getAIProvider(): AIProvider {
+  if (process.env.AI_API_KEY && process.env.AI_API_KEY.trim().length > 0) {
+    return new LLMAIProvider();
+  }
+  return new MockAIProvider();
+}
+
+export const aiProvider: AIProvider = getAIProvider();

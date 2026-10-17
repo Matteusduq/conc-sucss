@@ -92,6 +92,8 @@ describe('FASE 3 — SUPABASE REPOSITORY & DATA MIGRATION', () => {
           source_type: 'MANUAL',
           source_material_id: null,
           source_error_id: null,
+          source_highlight_id: null,
+          explanation: null,
           exam_priority: 'HIGH',
           priority_boost: 0,
           active: true,

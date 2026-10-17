@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import Link from 'next/link';
 import { Rating } from 'ts-fsrs';
 import { CardWithMetadata } from '@/lib/fsrs/types';
 import { getScheduledIntervals, dbStateToFsrsCard } from '@/lib/fsrs/scheduler';
 import { Button } from '@/components/ui/Button';
 import { PriorityBadge } from '@/components/study/PriorityBadge';
 import { Badge } from '@/components/ui/Badge';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface FlashcardReviewerProps {
   cards: CardWithMetadata[];
@@ -24,12 +25,14 @@ export function FlashcardReviewer({
 }: FlashcardReviewerProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isRevealed, setIsRevealed] = useState(false);
+  const [showExplanation, setShowExplanation] = useState(false);
   const startTimeRef = useRef<number>(0);
 
   const currentCard = cards[currentIndex];
 
   useEffect(() => {
     startTimeRef.current = Date.now();
+    setShowExplanation(false);
   }, [currentIndex]);
 
   const intervals = useMemo(() => {
@@ -146,13 +149,49 @@ export function FlashcardReviewer({
 
         {/* Back Answer (Revealed) */}
         {isRevealed ? (
-          <div className="mt-6 pt-6 border-t border-zinc-800/80 animate-in fade-in duration-200 space-y-2">
-            <span className="text-[11px] uppercase tracking-wider font-bold text-emerald-400">
-              Verso • Resposta
-            </span>
+          <div className="mt-6 pt-6 border-t border-zinc-800/80 animate-in fade-in duration-200 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-wider font-bold text-emerald-400">
+                Verso • Resposta
+              </span>
+
+              {/* Botão discreto: Ver origem no material */}
+              {currentCard.source_highlight_id && (
+                <Link
+                  href={`/estudar/${currentCard.topic_id}?highlight=${currentCard.source_highlight_id}`}
+                  className="flex items-center gap-1.5 text-[11px] text-amber-400 hover:text-amber-300 transition-colors py-1 px-2 rounded-lg bg-amber-500/10 border border-amber-500/20"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Ver origem no material</span>
+                </Link>
+              )}
+            </div>
+
             <div className="text-base text-zinc-200 leading-relaxed font-normal bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/60">
               {currentCard.back}
             </div>
+
+            {/* Explicação complementar recolhível */}
+            {currentCard.explanation && (
+              <div className="pt-2">
+                <button
+                  onClick={() => setShowExplanation(!showExplanation)}
+                  className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-zinc-200 transition-colors py-1 cursor-pointer"
+                >
+                  {showExplanation ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-zinc-400" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+                  )}
+                  <span>Explicação do trecho</span>
+                </button>
+                {showExplanation && (
+                  <div className="mt-2 p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-300 leading-relaxed animate-in fade-in duration-150">
+                    {currentCard.explanation}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="mt-8 pt-4 border-t border-zinc-800/40 text-center">

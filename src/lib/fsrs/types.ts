@@ -11,6 +11,8 @@ export interface CardWithMetadata {
   subject_name?: string;
   exam_priority: Priority;
   priority_boost: number;
+  source_highlight_id?: string | null;
+  explanation?: string | null;
   fsrs_state?: {
     due: string;
     stability: number;

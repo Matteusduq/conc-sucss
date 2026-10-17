@@ -24,6 +24,8 @@ import {
   mapXpTransactionFromDb,
   mapDailyMissionFromDb,
   mapDailyMissionToDb,
+  mapMaterialHighlightFromDb,
+  mapMaterialHighlightToDb,
 } from '../mappers';
 import {
   Exam,
@@ -39,6 +41,7 @@ import {
   Topic,
   UserStudySettings,
   StudyEvent,
+  MaterialHighlight,
 } from '@/types/database';
 import {
   GamificationProfile,
@@ -346,6 +349,8 @@ export class SupabaseStudyRepository {
       source_type: card.source_type,
       source_material_id: card.source_material_id,
       source_error_id: card.source_error_id,
+      source_highlight_id: card.source_highlight_id,
+      explanation: card.explanation,
       exam_priority: card.exam_priority,
       priority_boost: card.priority_boost,
       active: card.active,
@@ -693,5 +698,77 @@ export class SupabaseStudyRepository {
       metadata,
     }, { onConflict: 'user_id, migration_key' });
     if (error) throw new PersistenceError(`Erro ao marcar import V3: ${error.message}`, error);
+  }
+
+  // ==========================================================================
+  // MATERIAL HIGHLIGHTS & ANCORAGEM ROBUSTA
+  // ==========================================================================
+
+  async listMaterialHighlights(userId: string, materialId: string): Promise<MaterialHighlight[]> {
+    const { data, error } = await this.supabase
+      .from('material_highlights')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('material_id', materialId)
+      .order('page_number', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new PersistenceError(`Erro ao listar destaques do material: ${error.message}`, error);
+    }
+
+    return (data || []).map(mapMaterialHighlightFromDb);
+  }
+
+  async persistMaterialHighlight(userId: string, highlight: MaterialHighlight): Promise<void> {
+    const dbPayload = mapMaterialHighlightToDb({ ...highlight, user_id: userId });
+    const { error } = await this.supabase
+      .from('material_highlights')
+      .upsert(dbPayload, { onConflict: 'user_id, id' });
+
+    if (error) {
+      throw new PersistenceError(`Erro ao persistir destaque: ${error.message}`, error);
+    }
+  }
+
+  async deleteMaterialHighlight(userId: string, highlightId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('material_highlights')
+      .delete()
+      .eq('user_id', userId)
+      .eq('id', highlightId);
+
+    if (error) {
+      throw new PersistenceError(`Erro ao excluir destaque: ${error.message}`, error);
+    }
+  }
+
+  async updateMaterialHighlightAI(
+    userId: string,
+    highlight: Partial<MaterialHighlight> & { id: string }
+  ): Promise<void> {
+    const updatePayload: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    if (highlight.ai_status !== undefined) updatePayload.ai_status = highlight.ai_status;
+    if (highlight.ai_explanation !== undefined) updatePayload.ai_explanation = highlight.ai_explanation;
+    if (highlight.ai_key_point !== undefined) updatePayload.ai_key_point = highlight.ai_key_point;
+    if (highlight.ai_cebraspe_trap !== undefined) updatePayload.ai_cebraspe_trap = highlight.ai_cebraspe_trap;
+    if (highlight.ai_flashcard_draft !== undefined) updatePayload.ai_flashcard_draft = highlight.ai_flashcard_draft;
+    if (highlight.ai_provider !== undefined) updatePayload.ai_provider = highlight.ai_provider;
+    if (highlight.ai_model !== undefined) updatePayload.ai_model = highlight.ai_model;
+    if (highlight.ai_generated_at !== undefined) updatePayload.ai_generated_at = highlight.ai_generated_at;
+    if (highlight.ai_error !== undefined) updatePayload.ai_error = highlight.ai_error;
+
+    const { error } = await this.supabase
+      .from('material_highlights')
+      .update(updatePayload)
+      .eq('user_id', userId)
+      .eq('id', highlight.id);
+
+    if (error) {
+      throw new PersistenceError(`Erro ao atualizar IA do destaque: ${error.message}`, error);
+    }
   }
 }

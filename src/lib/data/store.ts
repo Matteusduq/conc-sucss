@@ -835,6 +835,8 @@ export function createFlashcardAction(
   const cardId = `fc-${Date.now()}`;
   const newCard: Flashcard = {
     ...cardData,
+    source_highlight_id: cardData.source_highlight_id ?? null,
+    explanation: cardData.explanation ?? null,
     id: cardId,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -1265,6 +1267,8 @@ export function getDueFlashcards(store: AppStoreData, now: Date = new Date()): C
         subject_name: topic ? subjectMap.get(topic.subject_id) : undefined,
         exam_priority: card.exam_priority,
         priority_boost: card.priority_boost,
+        source_highlight_id: card.source_highlight_id,
+        explanation: card.explanation,
         fsrs_state: fsrs,
       });
     }

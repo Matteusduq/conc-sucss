@@ -83,3 +83,21 @@ Assim que `status = 'AVAILABLE'`, a interface da **Biblioteca** e do **Leitor de
 3. Anotações por página;
 4. Marcadores de página (bookmarks);
 5. Acompanhamento de porcentagem de leitura no `material_progress`.
+
+---
+
+## 4. Padrão de Qualidade dos PDFs (Requisitos Não Negociáveis)
+
+Para que a text layer nativa do `react-pdf` / `pdfjs-dist`, o algoritmo de ancoragem de marcações (`text-anchor.ts`) e o gerador pedagógico de flashcards funcionem com 100% de precisão, **todos os materiais acadêmicos futuros devem ser PDFs textuais nativos, e não páginas rasterizadas como imagem**.
+
+### Diretrizes Técnicas Obrigatórias:
+1. **Camada Textual Preservada:** O texto deve ser selecionável nativamente através do DOM sem necessidade de OCR;
+2. **Fontes Incorporadas (Embedded Fonts):** Fontes vetoriais válidas devem ser incorporadas ao documento, evitando glifos corrompidos ou mapeamentos ToUnicode ausentes;
+3. **Páginas Estáveis:** As coordenadas e a ordem de leitura do fluxo de texto devem ser sequenciais e previsíveis;
+4. **Sem Rasterização:** É terminantemente proibido transformar parágrafos de texto em imagens PNG/JPEG chapadas;
+5. **Estrutura Amigável ao PDF.js:** Documentos devem aderir ao padrão PDF 1.5 a 1.7, permitindo extração rápida de `getTextContent()`;
+6. **Limites de Tamanho:** Arquivos devem respeitar o limite máximo do bucket ($100\text{ MB}$), recomendando-se entre $2\text{ MB}$ e $35\text{ MB}$ por capítulo temático;
+7. **MIME Type Oficial:** O cabeçalho deve ser estritamente `application/pdf`.
+
+> **Aviso:** Materiais escaneados sem OCR nativo ou gerados por ferramentas de print/canvas não fornecerão coordenadas de `Range` precisas e serão rejeitados na validação prévia de ingestão.
+

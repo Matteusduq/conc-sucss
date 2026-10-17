@@ -25,6 +25,8 @@ interface CreateFlashcardModalProps {
     source_type: 'MANUAL' | 'ERROR_LOG' | 'MATERIAL';
     source_error_id: string | null;
     source_material_id: string | null;
+    source_highlight_id?: string | null;
+    explanation?: string | null;
     exam_priority: Priority;
     priority_boost: number;
     active: boolean;
@@ -74,6 +76,8 @@ export function CreateFlashcardModal({
       source_type: sourceErrorId ? 'ERROR_LOG' : 'MANUAL',
       source_error_id: sourceErrorId,
       source_material_id: null,
+      source_highlight_id: null,
+      explanation: null,
       exam_priority: selectedTopic.priority,
       priority_boost: cardType === 'ERROR' ? 1.0 : 0,
       active: true,

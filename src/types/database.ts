@@ -31,6 +31,66 @@ export type CardType = 'CONTENT' | 'ERROR' | 'COMPARISON' | 'RULE' | 'CEBRASPE_T
 export type FlashcardSourceType = 'MANUAL' | 'MATERIAL' | 'ERROR_LOG' | 'AI_GENERATED';
 export type FsrsRating = 'AGAIN' | 'HARD' | 'GOOD' | 'EASY';
 
+export type HighlightAIStatus =
+  | 'NOT_REQUESTED'
+  | 'GENERATING'
+  | 'READY'
+  | 'NOT_RECOMMENDED'
+  | 'FAILED';
+
+export type HighlightColor = 'YELLOW' | 'GREEN' | 'BLUE' | 'PINK' | 'PURPLE';
+
+export interface HighlightRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface HighlightFlashcardDraft {
+  front: string;
+  back: string;
+  card_type?: CardType;
+  cardType?: CardType;
+  exam_priority?: Priority;
+  examPriority?: Priority;
+  explanation?: string | null;
+}
+
+export interface MaterialHighlight {
+  id: string;
+  user_id: string;
+  material_id: string;
+  topic_id: string;
+  page_number: number;
+  material_version: number;
+
+  selected_text: string;
+  context_before: string | null;
+  context_after: string | null;
+
+  quote_prefix: string | null;
+  quote_suffix: string | null;
+  text_start_offset: number | null;
+  text_end_offset: number | null;
+
+  rects: HighlightRect[];
+  color: HighlightColor;
+
+  ai_status: HighlightAIStatus;
+  ai_explanation: string | null;
+  ai_key_point: string | null;
+  ai_cebraspe_trap: string | null;
+  ai_flashcard_draft: HighlightFlashcardDraft | null;
+  ai_provider: string | null;
+  ai_model: string | null;
+  ai_generated_at: string | null;
+  ai_error: string | null;
+
+  created_at: string;
+  updated_at: string;
+}
+
 export type ExamBlockCode = 'P1' | 'P2' | 'P3';
 export type PriorityBasis =
   | 'RESEARCH_AND_EDITAL'
@@ -275,6 +335,8 @@ export interface Flashcard {
   source_type: FlashcardSourceType;
   source_material_id: string | null;
   source_error_id: string | null;
+  source_highlight_id?: string | null;
+  explanation?: string | null;
   exam_priority: Priority;
   priority_boost: number;
   active: boolean;

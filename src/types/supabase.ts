@@ -497,10 +497,12 @@ export type Database = {
           created_at: string
           exam_id: string
           exam_priority: string
+          explanation: string | null
           front: string
           id: string
           priority_boost: number
           source_error_id: string | null
+          source_highlight_id: string | null
           source_material_id: string | null
           source_type: string
           subject_id: string
@@ -516,10 +518,12 @@ export type Database = {
           created_at?: string
           exam_id: string
           exam_priority?: string
+          explanation?: string | null
           front: string
           id: string
           priority_boost?: number
           source_error_id?: string | null
+          source_highlight_id?: string | null
           source_material_id?: string | null
           source_type?: string
           subject_id: string
@@ -535,10 +539,12 @@ export type Database = {
           created_at?: string
           exam_id?: string
           exam_priority?: string
+          explanation?: string | null
           front?: string
           id?: string
           priority_boost?: number
           source_error_id?: string | null
+          source_highlight_id?: string | null
           source_material_id?: string | null
           source_type?: string
           subject_id?: string
@@ -548,6 +554,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "flashcards_source_highlight_fk"
+            columns: ["user_id", "source_highlight_id"]
+            isOneToOne: false
+            referencedRelation: "material_highlights"
+            referencedColumns: ["user_id", "id"]
+          },
           {
             foreignKeyName: "flashcards_user_id_topic_id_fkey"
             columns: ["user_id", "topic_id"]
@@ -595,6 +608,108 @@ export type Database = {
           weekly_consistency_days?: number
         }
         Relationships: []
+      }
+      material_highlights: {
+        Row: {
+          ai_cebraspe_trap: string | null
+          ai_error: string | null
+          ai_explanation: string | null
+          ai_flashcard_draft: Json | null
+          ai_generated_at: string | null
+          ai_key_point: string | null
+          ai_model: string | null
+          ai_provider: string | null
+          ai_status: string
+          color: string
+          context_after: string | null
+          context_before: string | null
+          created_at: string
+          id: string
+          material_id: string
+          material_version: number
+          page_number: number
+          quote_prefix: string | null
+          quote_suffix: string | null
+          rects: Json
+          selected_text: string
+          text_end_offset: number | null
+          text_start_offset: number | null
+          topic_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_cebraspe_trap?: string | null
+          ai_error?: string | null
+          ai_explanation?: string | null
+          ai_flashcard_draft?: Json | null
+          ai_generated_at?: string | null
+          ai_key_point?: string | null
+          ai_model?: string | null
+          ai_provider?: string | null
+          ai_status?: string
+          color?: string
+          context_after?: string | null
+          context_before?: string | null
+          created_at?: string
+          id: string
+          material_id: string
+          material_version?: number
+          page_number: number
+          quote_prefix?: string | null
+          quote_suffix?: string | null
+          rects?: Json
+          selected_text: string
+          text_end_offset?: number | null
+          text_start_offset?: number | null
+          topic_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_cebraspe_trap?: string | null
+          ai_error?: string | null
+          ai_explanation?: string | null
+          ai_flashcard_draft?: Json | null
+          ai_generated_at?: string | null
+          ai_key_point?: string | null
+          ai_model?: string | null
+          ai_provider?: string | null
+          ai_status?: string
+          color?: string
+          context_after?: string | null
+          context_before?: string | null
+          created_at?: string
+          id?: string
+          material_id?: string
+          material_version?: number
+          page_number?: number
+          quote_prefix?: string | null
+          quote_suffix?: string | null
+          rects?: Json
+          selected_text?: string
+          text_end_offset?: number | null
+          text_start_offset?: number | null
+          topic_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "material_highlights_material_fk"
+            columns: ["user_id", "material_id"]
+            isOneToOne: false
+            referencedRelation: "study_materials"
+            referencedColumns: ["user_id", "id"]
+          },
+          {
+            foreignKeyName: "material_highlights_topic_fk"
+            columns: ["user_id", "topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["user_id", "id"]
+          },
+        ]
       }
       material_progress: {
         Row: {

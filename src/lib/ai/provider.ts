@@ -5,6 +5,8 @@ import {
   FlashcardDraft,
   StudyAdjustmentInput,
   AIInsightOutput,
+  HighlightExplanationInput,
+  HighlightExplanationResult,
 } from './types';
 
 export interface AIProvider {
@@ -12,4 +14,5 @@ export interface AIProvider {
   analyzeErrorPatterns(input: ErrorPatternInput): Promise<AIInsightOutput>;
   generateFlashcards(input: FlashcardGenerationInput): Promise<FlashcardDraft[]>;
   suggestStudyAdjustment(input: StudyAdjustmentInput): Promise<AIInsightOutput>;
+  explainHighlightAndDraftFlashcard(input: HighlightExplanationInput): Promise<HighlightExplanationResult>;
 }
