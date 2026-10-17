@@ -502,7 +502,7 @@ export function processGamification(
   const weeklyStats = calculateWeeklyConsistency(
     meaningfulDates,
     todayStr,
-    store.settings.gamification_weekly_target_days || 6
+    store.settings.gamification_weekly_target_days || 5
   );
 
   const updatedProfile: GamificationProfile = {

@@ -98,11 +98,12 @@ export default function HojePage() {
     reviews: store.reviews,
     discursiveSessions: store.discursiveSessions || [],
     mockExams: store.mockExams || [],
+    studySessions: store.studySessions || [],
   });
   const weeklyRhythm = calculateWeeklyConsistency(
     meaningfulDates,
     todayStr,
-    store.settings?.gamification_weekly_target_days || 6
+    store.settings?.gamification_weekly_target_days || 5
   );
 
   return (

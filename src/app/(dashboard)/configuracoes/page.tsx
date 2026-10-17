@@ -9,14 +9,14 @@ import { Save, CheckCircle, ExternalLink, Sparkles, Sliders, Shield } from 'luci
 import { saveStore } from '@/lib/data/store';
 
 export default function ConfiguracoesPage() {
-  const { store, user, userEmail, updateStore } = useModal();
+  const { store, user, userEmail, updateStore, isBackendConnected } = useModal();
   const [examDate, setExamDate] = useState(store.exam.exam_date || '2027-01-17');
-  const [weeklyMinutes, setWeeklyMinutes] = useState(store.settings.weekly_study_target_minutes || 1080);
-  const [memoryMinutes, setMemoryMinutes] = useState(store.settings.memory_daily_minutes || 25);
+  const [weeklyMinutes, setWeeklyMinutes] = useState(store.settings.weekly_study_target_minutes || 1200);
+  const [memoryMinutes, setMemoryMinutes] = useState(store.settings.memory_daily_minutes || 20);
   const [desiredRetention, setDesiredRetention] = useState(store.settings.desired_retention || 0.90);
-  const [highQ, setHighQ] = useState(store.settings.default_high_questions || 30);
-  const [medQ, setMedQ] = useState(store.settings.default_medium_questions || 20);
-  const [lowQ, setLowQ] = useState(store.settings.default_low_questions || 15);
+  const [highQ, setHighQ] = useState(store.settings.default_high_questions || 20);
+  const [medQ, setMedQ] = useState(store.settings.default_medium_questions || 15);
+  const [lowQ, setLowQ] = useState(store.settings.default_low_questions || 10);
 
   // Gamification settings
   const [showAnimations, setShowAnimations] = useState(
@@ -29,7 +29,7 @@ export default function ConfiguracoesPage() {
     store.settings.gamification_show_streak !== false
   );
   const [weeklyTargetDays, setWeeklyTargetDays] = useState(
-    store.settings.gamification_weekly_target_days || 6
+    store.settings.gamification_weekly_target_days || 5
   );
 
   const [saved, setSaved] = useState(false);
@@ -90,16 +90,16 @@ export default function ConfiguracoesPage() {
       </div>
 
       {/* Backend & Supabase Status Card */}
-      <Card className={`p-5 space-y-3 ${user ? 'border-indigo-500/30 bg-indigo-950/10' : 'border-zinc-800 bg-zinc-900/30'}`}>
+      <Card className={`p-5 space-y-3 ${isBackendConnected ? 'border-emerald-500/30 bg-emerald-950/10' : user ? 'border-amber-500/30 bg-amber-950/10' : 'border-zinc-800 bg-zinc-900/30'}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className={`w-2.5 h-2.5 rounded-full ${user ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <div className={`w-2.5 h-2.5 rounded-full ${isBackendConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
             <span className="text-sm font-semibold text-white">
-              {user ? 'Backend Supabase Conectado' : 'Aguardando Login Supabase'}
+              {isBackendConnected ? 'Backend Supabase Conectado' : user ? 'Sincronizando com Supabase...' : 'Aguardando Login Supabase'}
             </span>
           </div>
-          <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${user ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'}`}>
-            {user ? 'Sincronização Ativa' : 'Modo Offline'}
+          <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${isBackendConnected ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'}`}>
+            {isBackendConnected ? 'Sincronização Ativa' : 'Sincronização Inativa'}
           </span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs pt-1 text-zinc-300">

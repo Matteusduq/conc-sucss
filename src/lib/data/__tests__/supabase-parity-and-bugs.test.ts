@@ -346,4 +346,34 @@ describe('PARIDADE DE SCHEMA & CORREÇÃO DE BUGS DO SUPABASE', () => {
     expect(res2.success).toBe(true);
     expect(res2.created).toBe(false);
   });
+
+  // 11. loadAll() deve lançar PersistenceError se qualquer SELECT falhar
+  it('BUG 17: loadAll lança PersistenceError se qualquer SELECT de tabela falhar', async () => {
+    const createQueryChain = (table: string): any => {
+      const obj: any = {};
+      obj.eq = vi.fn(() => obj);
+      obj.maybeSingle = vi.fn().mockResolvedValue({
+        data: { migration_key: 'curriculum_bootstrap_v1' },
+        error: null,
+      });
+      obj.limit = vi.fn().mockResolvedValue(
+        table === 'exams'
+          ? { data: null, error: { message: 'Database connection timeout on exams' } }
+          : { data: [], error: null }
+      );
+      obj.order = vi.fn(() => obj);
+      obj.then = (resolve: any) => resolve({ data: [], error: null });
+      return obj;
+    };
+
+    const mockSupabaseWithSelectError: any = {
+      from: vi.fn((table: string) => ({
+        select: vi.fn(() => createQueryChain(table)),
+      })),
+    };
+
+    const repo = new SupabaseStudyRepository(mockSupabaseWithSelectError);
+    await expect(repo.loadAll(userId)).rejects.toThrow(PersistenceError);
+  });
 });
+

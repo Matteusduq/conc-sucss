@@ -34,6 +34,7 @@ interface ModalContextType {
   store: AppStoreData;
   user: User | null;
   userEmail: string | null;
+  isBackendConnected: boolean;
   refreshStore: () => Promise<void>;
   updateStore: (
     updater: (prev: AppStoreData) => AppStoreData,
@@ -51,6 +52,7 @@ export const ModalContext = createContext<ModalContextType>({
   store: getDefaultStore(),
   user: null,
   userEmail: null,
+  isBackendConnected: false,
   refreshStore: async () => {},
   updateStore: async () => {},
   signOut: async () => {},
@@ -65,6 +67,7 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
   const [user, setUser] = useState<User | null>(null);
   const [store, setStore] = useState<AppStoreData>(getDefaultStore());
   const [isLoading, setIsLoading] = useState(true);
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
 
   // Modals state
   const [tecModalOpen, setTecModalOpen] = useState(false);
@@ -97,6 +100,7 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
 
         if (!currentUser) {
           if (isMounted) {
+            setIsBackendConnected(false);
             router.push('/auth/login');
           }
           return;
@@ -111,6 +115,7 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
 
         if (isMounted) {
           setStore(remoteStore);
+          setIsBackendConnected(true);
           setIsLoading(false);
 
           // Verifica se há dados legados V3 a importar
@@ -125,6 +130,7 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
       } catch (err) {
         console.error('Erro na inicialização do Supabase:', err);
         if (isMounted) {
+          setIsBackendConnected(false);
           setIsLoading(false);
         }
       }
@@ -137,11 +143,26 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
       if (event === 'SIGNED_OUT' || !session) {
         if (isMounted) {
           setUser(null);
+          setIsBackendConnected(false);
           router.push('/auth/login');
         }
       } else if (session?.user) {
         if (isMounted) {
           setUser(session.user);
+          if (event === 'SIGNED_IN') {
+            try {
+              const remoteStore = await repo.loadAll(session.user.id);
+              if (isMounted) {
+                setStore(remoteStore);
+                setIsBackendConnected(true);
+              }
+            } catch (err) {
+              console.error('Erro ao hidratar dados no SIGNED_IN:', err);
+              if (isMounted) {
+                setIsBackendConnected(false);
+              }
+            }
+          }
         }
       }
     });
@@ -159,8 +180,10 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
       const repo = new SupabaseStudyRepository(supabase);
       const latest = await repo.loadAll(user.id);
       setStore(latest);
+      setIsBackendConnected(true);
     } catch (err) {
       console.warn('Erro ao atualizar store do Supabase:', err);
+      setIsBackendConnected(false);
     }
   };
 
@@ -305,6 +328,7 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
         store,
         user,
         userEmail: user?.email || null,
+        isBackendConnected,
         refreshStore,
         updateStore,
         pushNotification,
@@ -556,6 +580,13 @@ export function DashboardLayoutClient({ children }: { children: React.ReactNode 
               if (latestCard) {
                 await repo.persistFlashcard(uId, latestCard, latestFsrs);
               }
+              await repo.persistGamification(
+                uId,
+                updated.gamificationProfile,
+                updated.xpTransactions,
+                updated.unlockedAchievements,
+                updated.dailyMissions
+              );
             }
           );
         }}

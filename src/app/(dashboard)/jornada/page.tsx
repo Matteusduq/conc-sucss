@@ -91,11 +91,12 @@ export default function JornadaPage() {
     reviews: store.reviews,
     discursiveSessions: store.discursiveSessions || [],
     mockExams: store.mockExams || [],
+    studySessions: store.studySessions || [],
   });
   const weeklyRhythm = calculateWeeklyConsistency(
     meaningfulDates,
     todayStr,
-    store.settings?.gamification_weekly_target_days || 6
+    store.settings?.gamification_weekly_target_days || 5
   );
 
   // Check if Weekly Boss was completed in current week with real qualification

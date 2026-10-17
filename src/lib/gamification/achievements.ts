@@ -194,9 +194,14 @@ export function evaluateAchievements(
     reviews: store.reviews,
     discursiveSessions: store.discursiveSessions || [],
     mockExams: store.mockExams || [],
+    studySessions: store.studySessions || [],
   });
   const todayStr = getLocalDateString();
-  const weeklyRhythm = calculateWeeklyConsistency(meaningfulDates, todayStr, 6);
+  const weeklyRhythm = calculateWeeklyConsistency(
+    meaningfulDates,
+    todayStr,
+    store.settings?.gamification_weekly_target_days || 5
+  );
 
   // Check weekly boss defeat using qualifiesForWeeklyBoss
   const phaseInfo = calculateJourneyPhase({

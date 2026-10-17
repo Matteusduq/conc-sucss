@@ -120,9 +120,44 @@ export class SupabaseStudyRepository {
       this.supabase.from('user_achievements').select('achievement_id').eq('user_id', userId),
     ]);
 
+    // Verificar se qualquer SELECT retornou erro
+    const selectChecks: Array<{ table: string; error: any }> = [
+      { table: 'exams', error: examsRes.error },
+      { table: 'exam_blocks', error: blocksRes.error },
+      { table: 'subjects', error: subjectsRes.error },
+      { table: 'topics', error: topicsRes.error },
+      { table: 'syllabus_items', error: sylRes.error },
+      { table: 'topic_syllabus_items', error: topicSylRes.error },
+      { table: 'study_materials', error: materialsRes.error },
+      { table: 'material_progress', error: matProgRes.error },
+      { table: 'study_sessions', error: studySessionsRes.error },
+      { table: 'question_sessions', error: questionSessionsRes.error },
+      { table: 'error_logs', error: errorLogsRes.error },
+      { table: 'flashcards', error: flashcardsRes.error },
+      { table: 'flashcard_fsrs_state', error: fsrsRes.error },
+      { table: 'flashcard_reviews', error: reviewsRes.error },
+      { table: 'discursive_sessions', error: discursiveRes.error },
+      { table: 'user_study_settings', error: settingsRes.error },
+      { table: 'mock_exams', error: mockExamsRes.error },
+      { table: 'study_events', error: eventsRes.error },
+      { table: 'gamification_profiles', error: gamProfileRes.error },
+      { table: 'xp_transactions', error: xpTxRes.error },
+      { table: 'daily_missions', error: missionsRes.error },
+      { table: 'user_achievements', error: achievementsRes.error },
+    ];
+
+    for (const check of selectChecks) {
+      if (check.error) {
+        throw new PersistenceError(`Falha ao consultar tabela ${check.table}: ${check.error.message || JSON.stringify(check.error)}`, check.error);
+      }
+    }
+
     // Mapeamento e montagem do AppStoreData
     const examRow = examsRes.data?.[0];
-    const exam = examRow ? mapExamFromDb(examRow) : ({} as any);
+    if (!examRow) {
+      throw new PersistenceError('Registro principal de exame não encontrado após bootstrap.');
+    }
+    const exam = mapExamFromDb(examRow);
 
     const examBlocks = (blocksRes.data || []).map(mapExamBlockFromDb);
     const subjects = (subjectsRes.data || []).map(mapSubjectFromDb);
@@ -228,6 +263,10 @@ export class SupabaseStudyRepository {
       dailyMissions,
       unlockedAchievements,
     };
+  }
+
+  async loadUserData(userId: string): Promise<AppStoreData> {
+    return this.loadAll(userId);
   }
 
   // ==========================================================================
