@@ -458,7 +458,7 @@ export default function HojePage() {
               </div>
             </div>
             <div className="flex items-center gap-2 flex-wrap shrink-0">
-              <Link href="/estudar">
+              <Link href="/biblioteca">
                 <Button size="sm" variant="outline" className="text-xs">
                   <BookOpen className="w-3 h-3 mr-1" /> Biblioteca
                 </Button>

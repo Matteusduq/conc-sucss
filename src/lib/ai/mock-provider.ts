@@ -1,11 +1,13 @@
 import { AIProvider } from './provider';
 import {
   WeeklyAnalysisInput,
+  WeeklyAnalysisResult,
   ErrorPatternInput,
+  ErrorPatternResult,
   FlashcardGenerationInput,
   FlashcardDraft,
   StudyAdjustmentInput,
-  AIInsightOutput,
+  StudyAdjustmentResult,
   HighlightExplanationInput,
   HighlightExplanationResult,
 } from './types';
@@ -14,53 +16,108 @@ import { LLMAIProvider, AIConfigurationError } from './llm-provider';
 export class MockAIProvider implements AIProvider {
   constructor(private isTestMode: boolean = false) {}
 
-  async generateWeeklyAnalysis(_input: WeeklyAnalysisInput): Promise<AIInsightOutput> {
-    return {
-      id: 'mock-insight',
-      type: 'WEEKLY_ANALYSIS',
-      summary: 'IA ainda não configurada.',
-      details: ['Configure a chave de API e provedor no arquivo .env.local para habilitar análises generativas.'],
-      recommendations: [],
-      provider: 'none',
-      model: 'none',
-      generatedAt: new Date().toISOString(),
-    };
+  async generateWeeklyAnalysis(input: WeeklyAnalysisInput): Promise<WeeklyAnalysisResult> {
+    if (this.isTestMode || process.env.NODE_ENV === 'test') {
+      return {
+        summary: 'Semana com bom ritmo de estudo e evolução consistente em questões.',
+        details: [
+          `Total de ${input.totalStudyMinutes} minutos dedicados.`,
+          `Precisão líquida mantida em ${input.accuracyRate.toFixed(1)}%.`,
+        ],
+        recommendations: [
+          'Aumentar o volume de questões na disciplina de menor rendimento.',
+          'Zerar o backlog de revisões FSRS.',
+        ],
+        strongAreas: ['Língua Portuguesa'],
+        weakAreas: ['Regimento Interno da Câmara dos Deputados'],
+        focusPriority: 'HIGH',
+        balanceAnalysis: {
+          theory: 'Carga teórica adequada para a fase inicial.',
+          questions: 'Volume de questões dentro da meta diária.',
+          memory: 'Revisões FSRS em dia.',
+          discursive: 'Recomenda-se iniciar ao menos 1 treino semanal de P3.',
+        },
+        provider: 'mock-test',
+        model: 'mock-test-model',
+        generatedAt: new Date().toISOString(),
+      };
+    }
+
+    throw new AIConfigurationError('IA ainda não configurada. Configure AI_API_KEY no servidor.');
   }
 
-  async analyzeErrorPatterns(_input: ErrorPatternInput): Promise<AIInsightOutput> {
-    return {
-      id: 'mock-error-analysis',
-      type: 'ERROR_ANALYSIS',
-      summary: 'IA ainda não configurada.',
-      details: ['Os padrões de erro são agregados deterministicamente pelo sistema na tela de Erros.'],
-      recommendations: [],
-      provider: 'none',
-      model: 'none',
-      generatedAt: new Date().toISOString(),
-    };
+  async analyzeErrorPatterns(input: ErrorPatternInput): Promise<ErrorPatternResult> {
+    if (this.isTestMode || process.env.NODE_ENV === 'test') {
+      return {
+        summary: 'Padrão predominante de erros decorrentes de pegadinhas Cebraspe em prazos e quóruns.',
+        patterns: [
+          {
+            pattern: 'Inversão de Quórum Regimental',
+            possibleCause: 'Confusão entre maioria absoluta e maioria simples.',
+            recurrence: 3,
+            cebraspeTrap: 'A banca costuma trocar maioria simples por maioria absoluta em votações ordinárias.',
+            suggestedReview: 'Revisar tabela de quóruns no Regimento Interno.',
+            recommendFlashcard: true,
+          },
+        ],
+        recommendations: [
+          'Criar cartões de memorização para os quóruns constitucionais e regimentais.',
+          'Atenção às palavras absolutistas (apenas, exclusivamente) nas questões.',
+        ],
+        provider: 'mock-test',
+        model: 'mock-test-model',
+        generatedAt: new Date().toISOString(),
+      };
+    }
+
+    throw new AIConfigurationError('IA ainda não configurada. Configure AI_API_KEY no servidor.');
   }
 
-  async generateFlashcards(_input: FlashcardGenerationInput): Promise<FlashcardDraft[]> {
-    return [];
+  async generateFlashcards(input: FlashcardGenerationInput): Promise<FlashcardDraft[]> {
+    if (this.isTestMode || process.env.NODE_ENV === 'test') {
+      return [
+        {
+          front: `[${input.topicName}] Qual a regra geral para aprovação de matéria ordinária?`,
+          back: 'Maioria simples dos votos, presente a maioria absoluta dos membros da Casa.',
+          cardType: 'RULE',
+          examPriority: input.priority,
+          reasoning: 'Regra basilar de processo legislativo.',
+        },
+      ];
+    }
+
+    throw new AIConfigurationError('IA ainda não configurada. Configure AI_API_KEY no servidor.');
   }
 
-  async suggestStudyAdjustment(_input: StudyAdjustmentInput): Promise<AIInsightOutput> {
-    return {
-      id: 'mock-adjustment',
-      type: 'STUDY_RECOMMENDATION',
-      summary: 'IA ainda não configurada.',
-      details: ['O planejamento diário e distribuição de tempo são calculados pelo motor determinístico do sistema.'],
-      recommendations: [],
-      provider: 'none',
-      model: 'none',
-      generatedAt: new Date().toISOString(),
-    };
+  async suggestStudyAdjustment(input: StudyAdjustmentInput): Promise<StudyAdjustmentResult> {
+    if (this.isTestMode || process.env.NODE_ENV === 'test') {
+      return {
+        summary: `Faltam ${input.daysUntilExam} dias para a prova. Recomenda-se calibrar a carga prática.`,
+        justification: 'Com tópicos em risco pendentes, a calibragem fortalece a precisão em questões da Cebraspe.',
+        strategicAdvice: [
+          'Dedicar 40% do tempo a questões e resolução comentada.',
+          'Manter 25% em teoria de alta prioridade e 20% em FSRS.',
+        ],
+        suggestedDistribution: {
+          theoryPercent: 25,
+          questionsPercent: 40,
+          reviewPercent: 20,
+          discursivePercent: 15,
+        },
+        focusSubjects: ['Regimento Interno', 'Direito Constitucional'],
+        p3InclusionRecommended: true,
+        provider: 'mock-test',
+        model: 'mock-test-model',
+        generatedAt: new Date().toISOString(),
+      };
+    }
+
+    throw new AIConfigurationError('IA ainda não configurada. Configure AI_API_KEY no servidor.');
   }
 
   async explainHighlightAndDraftFlashcard(
     input: HighlightExplanationInput
   ): Promise<HighlightExplanationResult> {
-    // Em testes automatizados, provê retorno determinístico
     if (this.isTestMode || process.env.NODE_ENV === 'test') {
       const lowerText = input.selectedText.toLowerCase();
       if (
@@ -99,16 +156,25 @@ export class MockAIProvider implements AIProvider {
       };
     }
 
-    // Em produção, se não houver credencial configurada, nunca fabrica dados falsos
     throw new AIConfigurationError('IA ainda não configurada. Configure AI_API_KEY no servidor.');
   }
 }
 
+/**
+ * Retorna o provedor de IA apropriado de forma dinâmica.
+ * Se AI_API_KEY estiver configurada, instancia LLMAIProvider.
+ * Em ambiente de teste com mock, instancia MockAIProvider(true).
+ * Caso contrário, instancia MockAIProvider(false) que lança AIConfigurationError sem fabricar dados.
+ */
 export function getAIProvider(): AIProvider {
-  if (process.env.AI_API_KEY && process.env.AI_API_KEY.trim().length > 0) {
+  const apiKey = process.env.AI_API_KEY;
+  if (apiKey && apiKey.trim().length > 0) {
     return new LLMAIProvider();
   }
-  return new MockAIProvider();
+  if (process.env.NODE_ENV === 'test') {
+    return new MockAIProvider(true);
+  }
+  return new MockAIProvider(false);
 }
 
 export const aiProvider: AIProvider = getAIProvider();

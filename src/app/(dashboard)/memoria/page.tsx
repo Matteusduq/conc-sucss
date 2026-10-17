@@ -176,7 +176,7 @@ export default function MemoriaPage() {
         <EmptyState
           icon={Brain}
           title="Nenhum flashcard criado ainda"
-          description="Você pode criar flashcards manualmente, gerá-los a partir do Caderno de Erros ou futuramente com o assistente de IA."
+          description="Você pode criar flashcards manualmente, gerá-los a partir do Caderno de Erros ou diretamente no leitor de PDF selecionando um trecho com a IA (Xkiro · Qwen)."
           action={
             <Button size="sm" onClick={() => openCardModal()}>
               <Plus className="w-3.5 h-3.5 mr-1" />

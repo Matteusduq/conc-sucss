@@ -13,6 +13,9 @@ import {
   HelpCircle,
   Clock,
   Award,
+  Sparkles,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { formatDateBr } from '@/lib/utils/date';
 import {
@@ -28,6 +31,30 @@ import {
 export default function PerformancePage() {
   const { store, openTecModal } = useModal();
   const [selectedBlock, setSelectedBlock] = useState<'ALL' | 'P1' | 'P2'>('ALL');
+  const [weeklyAnalysis, setWeeklyAnalysis] = useState<any>(null);
+  const [isAnalyzingWeekly, setIsAnalyzingWeekly] = useState(false);
+  const [weeklyError, setWeeklyError] = useState<string | null>(null);
+
+  const handleRunWeeklyAnalysis = async () => {
+    setIsAnalyzingWeekly(true);
+    setWeeklyError(null);
+    try {
+      const res = await fetch('/api/ai/weekly-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: Boolean(weeklyAnalysis) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao processar análise.');
+      }
+      setWeeklyAnalysis(data.analysis);
+    } catch (err: any) {
+      setWeeklyError(err.message || 'Erro ao carregar análise de IA.');
+    } finally {
+      setIsAnalyzingWeekly(false);
+    }
+  };
 
   const topicMap = useMemo(() => new Map(store.topics.map((t) => [t.id, t])), [store.topics]);
   const subjectMap = useMemo(() => new Map(store.subjects.map((s) => [s.id, s.name])), [store.subjects]);
@@ -106,6 +133,125 @@ export default function PerformancePage() {
           </Button>
         </div>
       </div>
+
+      {/* Discrete AI Weekly Analysis Section */}
+      <Card className="p-4 md:p-5 border-zinc-800 bg-zinc-900/40 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                Análise da IA — Desempenho Semanal
+                <span className="text-[10px] font-normal text-zinc-400 font-mono">Xkiro · Qwen</span>
+              </h3>
+              <p className="text-xs text-zinc-400">
+                Diagnóstico pedagógico e equilíbrio entre teoria, questões, revisões FSRS e discursiva.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleRunWeeklyAnalysis}
+            disabled={isAnalyzingWeekly}
+            className="text-xs border-amber-500/30 text-amber-300 hover:bg-amber-500/10 shrink-0"
+          >
+            {isAnalyzingWeekly ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                Analisando...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                {weeklyAnalysis ? 'Atualizar Análise da Semana' : 'Analisar minha última semana'}
+              </>
+            )}
+          </Button>
+        </div>
+
+        {weeklyError && (
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{weeklyError}</span>
+          </div>
+        )}
+
+        {weeklyAnalysis && (
+          <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800/80 space-y-3.5 text-xs text-zinc-300 animate-in fade-in duration-300">
+            <div>
+              <span className="font-semibold text-zinc-200">Resumo da Semana:</span>
+              <p className="text-zinc-300 mt-1 leading-relaxed">{weeklyAnalysis.summary}</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-zinc-800/60">
+              <div>
+                <span className="font-semibold text-emerald-400 flex items-center gap-1.5 mb-1.5">
+                  <CheckCircle className="w-3.5 h-3.5" /> Pontos Fortes & Evolução
+                </span>
+                <ul className="list-disc list-inside space-y-1 text-zinc-400">
+                  {weeklyAnalysis.strongAreas?.length > 0 ? (
+                    weeklyAnalysis.strongAreas.map((item: string, idx: number) => (
+                      <li key={idx}>{item}</li>
+                    ))
+                  ) : (
+                    <li>Sem áreas de destaque registradas ainda</li>
+                  )}
+                </ul>
+              </div>
+
+              <div>
+                <span className="font-semibold text-amber-400 flex items-center gap-1.5 mb-1.5">
+                  <AlertCircle className="w-3.5 h-3.5" /> Alertas & Pontos de Atenção
+                </span>
+                <ul className="list-disc list-inside space-y-1 text-zinc-400">
+                  {weeklyAnalysis.weakAreas?.length > 0 ? (
+                    weeklyAnalysis.weakAreas.map((item: string, idx: number) => (
+                      <li key={idx}>{item}</li>
+                    ))
+                  ) : (
+                    <li>Nenhuma área crítica detectada</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+
+            {weeklyAnalysis.balanceAnalysis && (
+              <div className="pt-2 border-t border-zinc-800/60 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                <div className="p-2 rounded-lg bg-zinc-900/50 border border-zinc-800/60">
+                  <span className="font-bold text-zinc-400 block mb-0.5">Teoria</span>
+                  <span className="text-zinc-300">{weeklyAnalysis.balanceAnalysis.theory}</span>
+                </div>
+                <div className="p-2 rounded-lg bg-zinc-900/50 border border-zinc-800/60">
+                  <span className="font-bold text-zinc-400 block mb-0.5">Questões</span>
+                  <span className="text-zinc-300">{weeklyAnalysis.balanceAnalysis.questions}</span>
+                </div>
+                <div className="p-2 rounded-lg bg-zinc-900/50 border border-zinc-800/60">
+                  <span className="font-bold text-zinc-400 block mb-0.5">FSRS</span>
+                  <span className="text-zinc-300">{weeklyAnalysis.balanceAnalysis.memory}</span>
+                </div>
+                <div className="p-2 rounded-lg bg-zinc-900/50 border border-zinc-800/60">
+                  <span className="font-bold text-zinc-400 block mb-0.5">Discursiva</span>
+                  <span className="text-zinc-300">{weeklyAnalysis.balanceAnalysis.discursive}</span>
+                </div>
+              </div>
+            )}
+
+            {weeklyAnalysis.recommendations && weeklyAnalysis.recommendations.length > 0 && (
+              <div className="pt-2 border-t border-zinc-800/60">
+                <span className="font-semibold text-zinc-200 mb-1.5 block">Recomendações Prioritárias:</span>
+                <ul className="list-disc list-inside space-y-1 text-zinc-300">
+                  {weeklyAnalysis.recommendations.map((rec: string, idx: number) => (
+                    <li key={idx}>{rec}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
 
       {/* Block Filter Switcher */}
       <div className="flex items-center gap-2">

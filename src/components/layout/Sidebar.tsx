@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -41,6 +41,14 @@ interface SidebarProps {
 
 export function Sidebar({ userEmail, onSignOut }: SidebarProps) {
   const pathname = usePathname();
+  const [aiStatus, setAiStatus] = useState<{ configured: boolean; provider: string; model: string } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/ai/status')
+      .then((r) => r.json())
+      .then((data) => setAiStatus(data))
+      .catch(() => setAiStatus({ configured: false, provider: 'none', model: 'none' }));
+  }, []);
 
   return (
     <aside className="hidden md:flex flex-col w-64 shrink-0 border-r border-zinc-800 bg-zinc-950 p-4 min-h-screen justify-between">
@@ -125,19 +133,32 @@ export function Sidebar({ userEmail, onSignOut }: SidebarProps) {
           </div>
         )}
 
-        {/* Footer / Future AI status indicator */}
+        {/* AI Module Status indicator */}
         <div className="p-3 rounded-xl bg-zinc-900/50 border border-zinc-800/60 text-[11px] space-y-1">
-          <div className="flex items-center justify-between text-zinc-400">
+          <div className="flex items-center justify-between text-zinc-300">
             <span className="flex items-center gap-1.5 font-medium">
-              <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
+              <Sparkles className={cn("w-3.5 h-3.5", aiStatus?.configured ? "text-amber-400" : "text-zinc-500")} />
               Módulo IA
             </span>
-            <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
-              Preparado
+            <span
+              className={cn(
+                "text-[9px] uppercase px-1.5 py-0.5 rounded font-mono",
+                aiStatus?.configured
+                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                  : "bg-zinc-800 text-zinc-400"
+              )}
+            >
+              {aiStatus === null
+                ? '...'
+                : aiStatus.configured
+                ? 'Conectada'
+                : 'Não configurada'}
             </span>
           </div>
           <p className="text-[10px] text-zinc-400 leading-tight">
-            Motor determinístico ativo. Nenhuma chamada de API externa requerida.
+            {aiStatus?.configured
+              ? `${aiStatus.provider === 'xkiro' ? 'Xkiro' : aiStatus.provider} · ${aiStatus.model.includes('qwen') ? 'Qwen' : aiStatus.model}`
+              : 'Motor determinístico ativo.'}
           </p>
         </div>
       </div>

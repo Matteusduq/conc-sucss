@@ -14,6 +14,8 @@ import {
   Clock,
   Sparkles,
   PieChart,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import { ERROR_TYPE_OPTIONS } from '@/components/performance/ErrorLogModal';
 import { formatDateBr } from '@/lib/utils/date';
@@ -22,6 +24,34 @@ export default function ErrosPage() {
   const { store, openErrorModal, openCardModal, refreshStore, updateStore } = useModal();
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterResolved, setFilterResolved] = useState<'ALL' | 'UNRESOLVED' | 'RESOLVED'>('ALL');
+  const [selectedTopicFilter, setSelectedTopicFilter] = useState<string>('ALL');
+  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleAnalyzeErrors = async () => {
+    setIsAnalyzing(true);
+    setAiError(null);
+    try {
+      const res = await fetch('/api/ai/error-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topicId: selectedTopicFilter !== 'ALL' ? selectedTopicFilter : undefined,
+          force: Boolean(aiAnalysis),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao analisar erros.');
+      }
+      setAiAnalysis(data.analysis);
+    } catch (err: any) {
+      setAiError(err.message || 'Erro ao carregar análise de erros.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const errors = store.errorLogs;
   const topicMap = useMemo(() => new Map(store.topics.map((t) => [t.id, t])), [store.topics]);
@@ -117,6 +147,111 @@ export default function ErrosPage() {
           </Button>
         </div>
       </div>
+
+      {/* AI Error Diagnosis Section */}
+      <Card className="p-4 md:p-5 border-zinc-800 bg-zinc-900/40 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                Diagnóstico de Padrões com IA
+                <span className="text-[10px] font-normal text-zinc-400 font-mono">Xkiro · Qwen</span>
+              </h3>
+              <p className="text-xs text-zinc-400">
+                Detecção de pegadinhas Cebraspe recorrentes, causas conceituais e recomendações de memorização.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <select
+              value={selectedTopicFilter}
+              onChange={(e) => setSelectedTopicFilter(e.target.value)}
+              className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700"
+            >
+              <option value="ALL">Todos os Tópicos</option>
+              {store.topics.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleAnalyzeErrors}
+              disabled={isAnalyzing}
+              className="text-xs border-amber-500/30 text-amber-300 hover:bg-amber-500/10"
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  Diagnosticando...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                  {aiAnalysis ? 'Atualizar Diagnóstico' : 'Analisar padrões com IA'}
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {aiError && (
+          <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{aiError}</span>
+          </div>
+        )}
+
+        {aiAnalysis && (
+          <div className="p-4 rounded-xl bg-zinc-950/60 border border-zinc-800/80 space-y-3.5 text-xs text-zinc-300 animate-in fade-in duration-300">
+            <div>
+              <span className="font-semibold text-zinc-200">Diagnóstico Geral:</span>
+              <p className="text-zinc-300 mt-1 leading-relaxed">{aiAnalysis.summary}</p>
+            </div>
+
+            {aiAnalysis.patterns && aiAnalysis.patterns.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-zinc-800/60">
+                <span className="font-semibold text-zinc-200 block">Armadilhas & Padrões Detectados:</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  {aiAnalysis.patterns.map((pat: any, idx: number) => (
+                    <div key={idx} className="p-3 rounded-lg bg-zinc-900/60 border border-zinc-800 space-y-1">
+                      <div className="flex items-center justify-between text-zinc-300 font-bold">
+                        <span>{pat.pattern}</span>
+                        {pat.cebraspeTrap && (
+                          <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                            Pegadinha Cebraspe
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-zinc-400 text-[11px]"><strong className="text-zinc-300">Causa:</strong> {pat.possibleCause}</p>
+                      {pat.cebraspeTrap && (
+                        <p className="text-amber-300/90 text-[11px]"><strong className="text-amber-400">Armadilha:</strong> {pat.cebraspeTrap}</p>
+                      )}
+                      <p className="text-zinc-400 text-[11px]"><strong className="text-zinc-300">Revisão:</strong> {pat.suggestedReview}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {aiAnalysis.recommendations && aiAnalysis.recommendations.length > 0 && (
+              <div className="pt-2 border-t border-zinc-800/60">
+                <span className="font-semibold text-zinc-200 mb-1 block">Recomendações Práticas:</span>
+                <ul className="list-disc list-inside space-y-1 text-zinc-300">
+                  {aiAnalysis.recommendations.map((rec: string, idx: number) => (
+                    <li key={idx}>{rec}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
 
       {/* Aggregate Pattern Insights (Requirement 15) */}
       {topErrorPatterns.length > 0 && (

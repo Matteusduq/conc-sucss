@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { aiProvider } from '@/lib/ai/mock-provider';
+import { getAIProvider } from '@/lib/ai/mock-provider';
 import { AIConfigurationError } from '@/lib/ai/llm-provider';
 import { HighlightExplanationInput } from '@/lib/ai/types';
 
@@ -86,7 +86,8 @@ export async function POST(
 
     // 6. Chamada server-side
     try {
-      const result = await aiProvider.explainHighlightAndDraftFlashcard(aiInput);
+      const provider = getAIProvider();
+      const result = await provider.explainHighlightAndDraftFlashcard(aiInput);
 
       const status = result.shouldCreateFlashcard ? 'READY' : 'NOT_RECOMMENDED';
       const flashcardDraft = result.draft

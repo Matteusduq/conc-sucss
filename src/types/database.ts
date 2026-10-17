@@ -450,12 +450,10 @@ export interface StudyEvent {
 export interface AIInsight {
   id: string;
   user_id: string;
-  exam_id: string;
-  type: 'WEEKLY_ANALYSIS' | 'ERROR_ANALYSIS' | 'STUDY_RECOMMENDATION' | 'OTHER';
-  content: Record<string, unknown>;
-  provider: string | null;
-  model: string | null;
-  generated_at: string;
+  topic_id: string | null;
+  type: 'WEEKLY_ANALYSIS' | 'ERROR_ANALYSIS' | 'STUDY_RECOMMENDATION' | 'OTHER' | string;
+  insight: string;
+  created_at: string;
 }
 
 // Official Exam Integrity Constants (Edital nº 1 — Câmara dos Deputados — Cargo 11)

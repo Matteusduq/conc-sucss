@@ -1,18 +1,20 @@
 import {
   WeeklyAnalysisInput,
+  WeeklyAnalysisResult,
   ErrorPatternInput,
+  ErrorPatternResult,
   FlashcardGenerationInput,
   FlashcardDraft,
   StudyAdjustmentInput,
-  AIInsightOutput,
+  StudyAdjustmentResult,
   HighlightExplanationInput,
   HighlightExplanationResult,
 } from './types';
 
 export interface AIProvider {
-  generateWeeklyAnalysis(input: WeeklyAnalysisInput): Promise<AIInsightOutput>;
-  analyzeErrorPatterns(input: ErrorPatternInput): Promise<AIInsightOutput>;
+  generateWeeklyAnalysis(input: WeeklyAnalysisInput): Promise<WeeklyAnalysisResult>;
+  analyzeErrorPatterns(input: ErrorPatternInput): Promise<ErrorPatternResult>;
   generateFlashcards(input: FlashcardGenerationInput): Promise<FlashcardDraft[]>;
-  suggestStudyAdjustment(input: StudyAdjustmentInput): Promise<AIInsightOutput>;
+  suggestStudyAdjustment(input: StudyAdjustmentInput): Promise<StudyAdjustmentResult>;
   explainHighlightAndDraftFlashcard(input: HighlightExplanationInput): Promise<HighlightExplanationResult>;
 }

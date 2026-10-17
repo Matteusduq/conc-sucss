@@ -19,6 +19,10 @@ import {
   FileText,
   PenTool,
   CheckCircle2,
+  Sparkles,
+  AlertCircle,
+  Loader2,
+  X,
 } from 'lucide-react';
 import { Priority, RecommendedMaterialType } from '@/types/database';
 import { formatDateBr } from '@/lib/utils/date';
@@ -34,6 +38,33 @@ export default function PlanoPage() {
   const [onlyAtRisk, setOnlyAtRisk] = useState<boolean>(false);
   const [onlyAwaitingQuestions, setOnlyAwaitingQuestions] = useState<boolean>(false);
   const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
+
+  const [studyAdjustment, setStudyAdjustment] = useState<any>(null);
+  const [isAdjusting, setIsAdjusting] = useState(false);
+  const [adjustmentError, setAdjustmentError] = useState<string | null>(null);
+  const [showAdjustmentCard, setShowAdjustmentCard] = useState(false);
+
+  const handleGetAdjustment = async () => {
+    setIsAdjusting(true);
+    setAdjustmentError(null);
+    setShowAdjustmentCard(true);
+    try {
+      const res = await fetch('/api/ai/study-adjustment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force: Boolean(studyAdjustment) }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Falha ao processar recomendação.');
+      }
+      setStudyAdjustment(data.adjustment);
+    } catch (err: any) {
+      setAdjustmentError(err.message || 'Erro ao carregar recomendação.');
+    } finally {
+      setIsAdjusting(false);
+    }
+  };
 
   const subjectMap = useMemo(() => {
     return new Map(store.subjects.map((s) => [s.id, s]));
@@ -112,11 +143,108 @@ export default function PlanoPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleGetAdjustment}
+            disabled={isAdjusting}
+            className="border-amber-500/30 text-amber-300 hover:bg-amber-500/10 text-xs"
+          >
+            {isAdjusting ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                Consultando IA...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                Sugestão Estratégica da IA
+              </>
+            )}
+          </Button>
           <Button size="sm" onClick={() => openTecModal()}>
             + Registrar Sessão TEC
           </Button>
         </div>
       </div>
+
+      {/* Strategic AI Suggestion Card (Advisory) */}
+      {showAdjustmentCard && (
+        <Card className="p-4 md:p-5 border-amber-500/20 bg-amber-500/5 relative space-y-3.5 animate-in fade-in duration-300">
+          <button
+            type="button"
+            onClick={() => setShowAdjustmentCard(false)}
+            className="absolute top-3 right-3 p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+            title="Fechar sugestão"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          <div className="flex items-start gap-2.5 pr-8">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 mt-0.5">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-zinc-100 flex items-center gap-2">
+                Sugestão Estratégica da IA
+                <span className="text-[10px] font-normal text-zinc-400 font-mono">Xkiro · Qwen</span>
+              </h3>
+              <p className="text-xs text-amber-300/80 mt-0.5">
+                Esta é uma recomendação consultiva. O plano oficial continua sendo calculado pelo motor adaptativo.
+              </p>
+            </div>
+          </div>
+
+          {adjustmentError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{adjustmentError}</span>
+            </div>
+          )}
+
+          {studyAdjustment && (
+            <div className="space-y-3 text-xs text-zinc-300 pt-1">
+              <div>
+                <span className="font-semibold text-zinc-200">Diagnóstico:</span>
+                <p className="text-zinc-300 mt-1 leading-relaxed">{studyAdjustment.summary}</p>
+                <p className="text-zinc-400 mt-1 text-[11px]">{studyAdjustment.justification}</p>
+              </div>
+
+              {studyAdjustment.suggestedDistribution && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-zinc-800/60 text-center font-mono text-[11px]">
+                  <div className="p-2 rounded-lg bg-zinc-900/60 border border-zinc-800">
+                    <span className="text-zinc-400 block text-[10px] uppercase">Teoria</span>
+                    <span className="text-amber-400 font-bold text-sm">{studyAdjustment.suggestedDistribution.theoryPercent}%</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-zinc-900/60 border border-zinc-800">
+                    <span className="text-zinc-400 block text-[10px] uppercase">Questões</span>
+                    <span className="text-emerald-400 font-bold text-sm">{studyAdjustment.suggestedDistribution.questionsPercent}%</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-zinc-900/60 border border-zinc-800">
+                    <span className="text-zinc-400 block text-[10px] uppercase">FSRS / Revisão</span>
+                    <span className="text-indigo-400 font-bold text-sm">{studyAdjustment.suggestedDistribution.reviewPercent}%</span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-zinc-900/60 border border-zinc-800">
+                    <span className="text-zinc-400 block text-[10px] uppercase">Discursiva</span>
+                    <span className="text-purple-400 font-bold text-sm">{studyAdjustment.suggestedDistribution.discursivePercent}%</span>
+                  </div>
+                </div>
+              )}
+
+              {studyAdjustment.strategicAdvice && studyAdjustment.strategicAdvice.length > 0 && (
+                <div className="pt-2 border-t border-zinc-800/60">
+                  <span className="font-semibold text-zinc-200 block mb-1">Diretrizes Práticas:</span>
+                  <ul className="list-disc list-inside space-y-1 text-zinc-300">
+                    {studyAdjustment.strategicAdvice.map((adv: string, idx: number) => (
+                      <li key={idx}>{adv}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Block Selector Filter */}
       <div className="flex items-center gap-2">
