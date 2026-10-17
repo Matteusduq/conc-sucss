@@ -352,14 +352,8 @@ export function PdfReader({
   }, []);
 
   const handleClearSelection = useCallback(() => {
-    // Pequeno debounce para não fechar no mousedown antes do clique no botão
-    setTimeout(() => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed) {
-        setActiveSelection(null);
-        setToolbarPos(null);
-      }
-    }, 150);
+    setActiveSelection(null);
+    setToolbarPos(null);
   }, []);
 
   const handleMultiPageSelectionAttempt = useCallback(() => {
@@ -818,6 +812,7 @@ export function PdfReader({
               zoom={zoom}
               highlights={currentPageHighlights}
               activeHighlightId={selectedHighlight?.id || null}
+              activeSelection={activeSelection}
               currentMaterialVersion={material.version || 1}
               onLoadSuccess={handleDocumentLoadSuccess}
               onLoadError={handlePdfLoadError}

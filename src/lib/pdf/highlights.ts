@@ -14,6 +14,56 @@ export interface SelectionValidationResult {
  * Normaliza os retângulos de seleção do DOM para proporções relativas (0..1)
  * da página, permitindo escalar perfeitamente com zoom e redimensionamento.
  */
+/**
+ * Mescla retângulos que estejam na mesma linha visual e sejam adjacentes ou sobrepostos,
+ * evitando múltiplos fragmentos com costuras/bordas repetidas na mesma linha.
+ * Mantém múltiplos retângulos quando a seleção ocupar mais de uma linha.
+ */
+export function mergeAdjacentLineRects(rects: HighlightRect[]): HighlightRect[] {
+  if (rects.length <= 1) return rects;
+
+  // Ordena por y (linha vertical), depois por x (horizontal)
+  const sorted = [...rects].sort((a, b) => {
+    const yDiff = a.y - b.y;
+    if (Math.abs(yDiff) > 0.005) return yDiff;
+    return a.x - b.x;
+  });
+
+  const merged: HighlightRect[] = [];
+  let current = { ...sorted[0] };
+
+  for (let i = 1; i < sorted.length; i++) {
+    const next = sorted[i];
+    // Verifica se está na mesma linha visual (mesmo topo e altura aproximados)
+    const sameLine =
+      Math.abs(current.y - next.y) < 0.006 &&
+      Math.abs(current.height - next.height) < 0.008;
+    // Verifica se há adjacência ou sobreposição horizontal
+    const touchesOrOverlaps = next.x <= current.x + current.width + 0.006;
+
+    if (sameLine && touchesOrOverlaps) {
+      // Mescla os retângulos da mesma linha mantendo a caixa justa do texto
+      const newX = Math.min(current.x, next.x);
+      const newRight = Math.max(current.x + current.width, next.x + next.width);
+      const newY = Math.min(current.y, next.y);
+      const newBottom = Math.max(current.y + current.height, next.y + next.height);
+
+      current = {
+        x: Number(newX.toFixed(5)),
+        y: Number(newY.toFixed(5)),
+        width: Number((newRight - newX).toFixed(5)),
+        height: Number((newBottom - newY).toFixed(5)),
+      };
+    } else {
+      merged.push(current);
+      current = { ...next };
+    }
+  }
+
+  merged.push(current);
+  return merged;
+}
+
 export function normalizeRects(
   clientRects: DOMRectList | DOMRect[],
   pageRect: DOMRect
@@ -25,6 +75,11 @@ export function normalizeRects(
 
   for (const rect of rectArray) {
     if (rect.width <= 0 || rect.height <= 0) continue;
+
+    // Filtra retângulos de contêineres anômalos que cubram a página inteira
+    if (rect.height / pageRect.height > 0.8 && rect.width / pageRect.width > 0.8) {
+      continue;
+    }
 
     const x = Math.max(0, Math.min(1, (rect.left - pageRect.left) / pageRect.width));
     const y = Math.max(0, Math.min(1, (rect.top - pageRect.top) / pageRect.height));
@@ -41,7 +96,7 @@ export function normalizeRects(
     }
   }
 
-  return rects;
+  return mergeAdjacentLineRects(rects);
 }
 
 /**

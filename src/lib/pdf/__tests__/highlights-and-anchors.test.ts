@@ -28,6 +28,33 @@ describe('PDF Highlights & Anchoring Utilities (Points 8-13)', () => {
     expect(denorm.height).toBeCloseTo(20, 2);
   });
 
+  // Ponto 8b: mesclagem de retângulos na mesma linha e preservação de múltiplas linhas
+  it('8b. mescla fragmentos adjacentes na mesma linha e preserva múltiplas linhas distintas', () => {
+    const pageRect = { left: 0, top: 0, width: 1000, height: 1000 } as DOMRect;
+    // Dois fragmentos na mesma linha (y=100) e um na linha seguinte (y=130)
+    const clientRects = [
+      { left: 100, top: 100, width: 150, height: 20 } as DOMRect, // Span 1 linha 1
+      { left: 250, top: 100, width: 200, height: 20 } as DOMRect, // Span 2 linha 1 (toca o span 1)
+      { left: 100, top: 130, width: 300, height: 20 } as DOMRect, // Linha 2
+    ];
+
+    const normalized = normalizeRects(clientRects, pageRect);
+    // Deve resultar em exatamente 2 retângulos: 1 unificado para a linha 1 e 1 para a linha 2
+    expect(normalized).toHaveLength(2);
+
+    // Linha 1 mesclada: x=0.1, y=0.1, width=0.35 (150+200)/1000, height=0.02
+    expect(normalized[0].x).toBeCloseTo(0.1, 4);
+    expect(normalized[0].y).toBeCloseTo(0.1, 4);
+    expect(normalized[0].width).toBeCloseTo(0.35, 4);
+    expect(normalized[0].height).toBeCloseTo(0.02, 4);
+
+    // Linha 2 separada: x=0.1, y=0.13, width=0.3, height=0.02
+    expect(normalized[1].x).toBeCloseTo(0.1, 4);
+    expect(normalized[1].y).toBeCloseTo(0.13, 4);
+    expect(normalized[1].width).toBeCloseTo(0.3, 4);
+    expect(normalized[1].height).toBeCloseTo(0.02, 4);
+  });
+
   // Ponto 9: seleção vazia ou fora de container
   it('9. rejeita seleção vazia ou de apenas espaços em branco', () => {
     const mockPageElement = {

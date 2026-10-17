@@ -1,23 +1,24 @@
 'use client';
 
 import React from 'react';
-import { MaterialHighlight } from '@/types/database';
+import { MaterialHighlight, HighlightRect } from '@/types/database';
 
 interface HighlightOverlayProps {
   highlights: MaterialHighlight[];
   activeHighlightId: string | null;
+  pendingSelectionRects?: HighlightRect[] | null;
   currentMaterialVersion?: number;
-  onSelectHighlight: (highlight: MaterialHighlight) => void;
 }
 
 export function HighlightOverlay({
   highlights,
   activeHighlightId,
+  pendingSelectionRects,
   currentMaterialVersion,
-  onSelectHighlight,
 }: HighlightOverlayProps) {
   return (
-    <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+    <div className="pdf-highlight-overlay absolute inset-0 pointer-events-none overflow-hidden select-none">
+      {/* 1. Destaques salvos e persistidos */}
       {highlights.map((highlight) => {
         // Se a versão do highlight diferir da versão do PDF, não renderiza posições antigas
         if (
@@ -33,35 +34,46 @@ export function HighlightOverlay({
           <React.Fragment key={highlight.id}>
             {highlight.rects.map((rect, idx) => (
               <div
-                key={`${highlight.id}-${idx}`}
-                onClick={(e) => {
-                  const sel = window.getSelection();
-                  // Se o usuário acabou de selecionar texto, não abre o clique
-                  if (sel && sel.toString().trim().length > 0) {
-                    return;
-                  }
-                  e.stopPropagation();
-                  onSelectHighlight(highlight);
-                }}
-                className={`absolute cursor-pointer transition-all duration-150 rounded-[2px] pointer-events-auto ${
-                  isActive
-                    ? 'bg-amber-400/55 ring-2 ring-amber-500 shadow-sm z-20'
-                    : 'bg-amber-300/35 hover:bg-amber-400/50 z-10'
-                }`}
+                key={`hl-${highlight.id}-${idx}`}
+                className="absolute pointer-events-none transition-colors duration-150"
                 style={{
                   left: `${rect.x * 100}%`,
                   top: `${rect.y * 100}%`,
                   width: `${rect.width * 100}%`,
                   height: `${rect.height * 100}%`,
-                  mixBlendMode: 'multiply',
+                  backgroundColor: isActive
+                    ? 'rgba(250, 204, 21, 0.48)'
+                    : 'rgba(250, 204, 21, 0.34)',
+                  boxShadow: isActive
+                    ? '0 0 0 1.5px rgba(234, 179, 8, 0.7)'
+                    : 'none',
+                  borderRadius: '2px',
                 }}
-                title={`Marcação pág. ${highlight.page_number} (clique para ver detalhes)`}
-                aria-label={`Marcação de texto: ${highlight.selected_text.slice(0, 30)}...`}
+                aria-hidden="true"
               />
             ))}
           </React.Fragment>
         );
       })}
+
+      {/* 2. Destaque pendente imediato (preview enquanto o toolbar "Marcar + IA" está aberto) */}
+      {pendingSelectionRects &&
+        pendingSelectionRects.map((rect, idx) => (
+          <div
+            key={`pending-preview-${idx}`}
+            className="absolute pointer-events-none"
+            style={{
+              left: `${rect.x * 100}%`,
+              top: `${rect.y * 100}%`,
+              width: `${rect.width * 100}%`,
+              height: `${rect.height * 100}%`,
+              backgroundColor: 'rgba(250, 204, 21, 0.34)',
+              boxShadow: '0 0 0 1px rgba(245, 158, 11, 0.45)',
+              borderRadius: '2px',
+            }}
+            aria-hidden="true"
+          />
+        ))}
     </div>
   );
 }
